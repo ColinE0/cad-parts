@@ -1,12 +1,20 @@
 # OCCT / toolchain gotchas (each one has actually bitten)
 
-## The machine-killer: non-uniform scaling
+## Non-uniform scaling turns every face into a B-spline
 `transformGeometry` with a non-uniform scale converts every analytic face
-(cylinders, cones, tori) into BSplines. On a ~98-face imported STEP this was a
-runaway allocation that OOM-crashed the whole machine (2026-07-14). Avoid it
-entirely: rebuild the part parametrically from primitives, cut the analytic
-features off before scaling, or (for print-bound parts) scale the STL *mesh*
-instead of the B-rep. This risk is WHY every run sits under the RAM watchdog.
+(cylinders, cones, tori) into BSplines. The result stays valid and its volume
+exact, but later operations get fragile: `shell` and offset fail on the B-spline
+faces, and the mesh comes out about twice as dense. Avoid it: rebuild the part
+parametrically from primitives, cut the analytic features off before scaling,
+or (for print-bound parts) scale the STL *mesh* instead of the B-rep.
+
+This op was first blamed for the 2026-07-14 crash, when a long-lived CAD server
+process ran out of memory and took the whole machine down. A replay on 2026-11-14
+(CadQuery 2.8, OCCT 7.9) of the same scale on the same ~98-face imported STEP
+finished in 0.24 s at 0.68 GB committed, valid and volume-exact. The crash came
+from the long-lived process (imported models accumulating across calls), not
+from the scale. That is still why every run is a one-shot subprocess under the
+RAM watchdog.
 
 The mesh route, proven in the 2026-10-05 eval (a filleted, holed puck stretched
 1.2x in X: 1.38 GB peak, 7.9 s, watertight):
@@ -29,8 +37,8 @@ rebuild from primitives at the new size instead.
    a 300 s budget is an allocation problem, not a slow job.
 2. Read the committed totals the script printed in `<script>.out.txt`. Linear
    growth with no plateau is a runaway: something is held across iterations
-   (models appended to a list, re-imported STEPs) or an op is exploding (the
-   non-uniform scale above). A climb that levels off just above the cap is a
+   (models appended to a list, re-imported STEPs) or an op is exploding. A
+   climb that levels off just above the cap is a
    genuinely heavy job.
 3. Only the second case justifies raising `-MaxRamGB`, and only by a step.
    For the first, fix the geometry or drop the references, then re-run at the

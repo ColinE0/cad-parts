@@ -14,10 +14,10 @@ prints the results on FDM printers, so every STL that leaves here must slice cle
 
 ## Non-negotiables
 
-1. **One-shot subprocess only.** On 2026-07-14 heavy OCCT ops inside a
-   long-lived CAD server process OOM-crashed the entire machine (accumulated
-   imported models + non-uniform scaling exploding analytic faces into
-   BSplines). A crashed subprocess loses one run; a crashed in-process op takes
+1. **One-shot subprocess only.** On 2026-07-14 a long-lived CAD server
+   process OOM-crashed the entire machine as imported models accumulated across
+   calls (a 2026-11-14 replay cleared the non-uniform scale first blamed; see
+   gotchas). A crashed subprocess loses one run; a crashed in-process op takes
    the box down. Run every build through `scripts/run_watchdogged.ps1`, and
    every other venv script too (drawing probes, mesh checks), CadQuery or not.
 2. **Never edit a proven part file.** A script whose print has been tested and
@@ -192,8 +192,8 @@ step 10c through nine such deltas). Rules:
   prove "nothing else changed" with a text diff of the two scripts (only the
   docstring, NAME and the parameter differ) plus `describe()` against the
   analytic volume. No geometry-diff probe needed.
-- A large imported B-rep plus a non-uniform scale is the machine-killer
-  (gotchas). Never.
+- A non-uniform scale turns every face of an imported B-rep into a B-spline
+  (gotchas): shell and offset fail after it. Rebuild, or scale the mesh.
 
 ## cq_helpers API (venv site-packages)
 
@@ -355,7 +355,7 @@ at that scale.
 
 Read `references/gotchas.md`: the OCCT/toolchain landmines that have actually
 bitten: fuse validity on coplanar/tangent bites, ShapeFix masking, makeCone
-equal-radii, non-uniform scale BSpline explosion (the machine-killer),
+equal-radii, non-uniform scale turning faces into B-splines,
 Onshape-STEP tessellation cracks, float32 STL collapsing sub-micron edges, the
 manifold3d mesh-only path and swept-bevel ridges, chain drift, the
 painter-sort renders that faked see-through, edge selection, why the watchdog
