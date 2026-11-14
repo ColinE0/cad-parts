@@ -1,0 +1,8 @@
+cad-parts: a CAD skill for Claude Code
+Copyright 2026 Colin Ezra Wilder
+
+This product includes software developed by Colin Ezra Wilder
+(https://github.com/ColinE0/cad-parts), licensed under the Apache License, Version 2.0.
+
+Built with Claude Code: the skill, its helpers and its eval harness were written in
+collaboration with Claude (Anthropic).

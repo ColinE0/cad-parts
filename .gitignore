@@ -1,0 +1,14 @@
+# run logs the runner writes beside every script
+*.out.txt
+*.err.txt
+
+# Python
+__pycache__/
+*.pyc
+
+# eval runs write here when the harness is pointed at this folder
+evals/runs/
+evals/logs/
+evals/spec/
+evals/venv/
+evals/skill-under-test/

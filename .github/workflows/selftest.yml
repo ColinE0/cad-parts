@@ -1,0 +1,27 @@
+name: install + self-test
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  windows:
+    # The runner is Windows-only (job objects), so CI is too.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      # GitHub's Windows runners have no OpenGL 3.2, which VTK's offscreen renderer needs.
+      # Self-test group 11 (renders) is skipped here; every other group runs.
+      CADPARTS_SKIP_RENDER: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Install uv (official installer, same step as the README)
+        shell: pwsh
+        run: irm https://astral.sh/uv/install.ps1 | iex
+
+      - name: Run setup/install.ps1 exactly as a user would (venv, helpers, skill, self-test)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File .\setup\install.ps1
