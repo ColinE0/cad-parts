@@ -11,7 +11,8 @@ Run it after ANY edit to cq_helpers.py: export_checked is the gate that already
 caught a shipped bad part, and this is the only thing standing between an edit and a silent
 break. Group 9 also checks that the skill's versioned copies in ../venv-modules match what is
 installed in site-packages. Group 11 renders offscreen through VTK (a few seconds), render6,
-render_compare and render_views. Group 12 checks export_checked's mesh= pin.
+render_compare and render_views. Group 12 checks export_checked's mesh= pin. Group 13 checks
+that the gates survive `python -O` and that the STL must agree with the STEP.
 Set CADPARTS_SKIP_RENDER=1 to skip group 11 where there is no OpenGL 3.2 (the CI runner).
 """
 import os
@@ -344,6 +345,34 @@ try:
         assert "deflection" in str(e)
     print(f"12 export_checked mesh= ok (pinned STL byte-identical, {len(mp.faces)} faces vs "
           f"{len(md.faces)} default; caller unmeshed; a pre-pinned mesh is dropped with a note)", flush=True)
+
+    # 13. the gates are explicit errors, so `python -O` (or PYTHONOPTIMIZE) cannot strip them,
+    # and every STL must agree with the STEP read back from disk (2026-11-14, after an outside
+    # review pointed out that assert-based gates vanish under -O).
+    import subprocess
+    import sys
+    assert issubclass(h.GateError, AssertionError), "old `except AssertionError` handlers must still catch"
+    probe = ("import cadquery as cq, cq_helpers as h\n"
+             "try:\n"
+             f"    h.export_checked(cq.Workplane('XY').box(1, 1, 1), {str(TMP / 'opt')!r}, step=False, "
+             "mesh=(0.0, 0.2))\n"
+             "except h.GateError:\n"
+             "    print('gate held under -O')\n")
+    r = subprocess.run([sys.executable, "-O", "-c", probe], capture_output=True, text=True, timeout=300)
+    assert "gate held under -O" in r.stdout, (r.returncode, r.stdout[-500:], r.stderr[-1500:])
+    # a hexagonal prism standing in for a cylinder: watertight and valid, but not the part
+    can = cq.Workplane("XY").cylinder(10.0, 10.0)
+    try:
+        h.export_checked(can, str(TMP / "crude"), mesh=(4.0, 1.2))
+        raise SystemExit("a mesh far too coarse to be the part passed the STEP/STL agreement gate")
+    except h.GateError as e:
+        assert "disagree" in str(e), e
+    log = io.StringIO()
+    with contextlib.redirect_stdout(log):
+        h.export_checked(can, str(TMP / "can"))
+    assert "export check: STEP and STL agree" in log.getvalue(), log.getvalue()
+    print("13 gates survive python -O; the STEP/STL agreement gate catches a crude mesh and passes "
+          "a normal one", flush=True)
 finally:
     shutil.rmtree(TMP, ignore_errors=True)
 print("DONE", flush=True)

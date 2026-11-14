@@ -46,6 +46,12 @@ _LEN = 4   # rounding digits for mm values
 _VOL = 3   # rounding digits for mm^2 / mm^3 values
 
 
+class GateError(AssertionError):
+    """A cq_helpers check refused the input or the geometry. Raised explicitly, never with
+    assert, so `python -O` or a PYTHONOPTIMIZE setting cannot skip a gate. It subclasses
+    AssertionError, so existing `except AssertionError` handlers still catch it."""
+
+
 def _val(shape):
     """Normalize Workplane -> Shape; pass Shapes through."""
     return shape.val() if hasattr(shape, "val") else shape
@@ -78,10 +84,14 @@ def _has_mesh(shape):
                for f in shape.Faces())
 
 
-def export_checked(shape, basepath, stl=True, step=True, stl_dir=None, mesh=None):
-    """Export shape to basepath('.step'/'.stl'). Asserts BRep validity and,
-    for STL, mesh watertightness via trimesh. Returns the trimesh mesh (or
-    None if stl=False). stl_dir (e.g. "stl", the house rule since 2026-09-29)
+def export_checked(shape, basepath, stl=True, step=True, stl_dir=None, mesh=None,
+                   agree_tol=0.015):
+    """Export shape to basepath('.step'/'.stl'). Raises GateError unless the
+    B-rep is valid and, for STL, the mesh is watertight, consistently wound,
+    and agrees with the STEP read back from disk (or with shape itself when
+    step=False): bounding box within max(0.05 mm, 0.5 % of the part's largest
+    size) per side, volume within agree_tol (1.5 %). Returns the trimesh mesh
+    (or None if stl=False). stl_dir (e.g. "stl", the house rule since 2026-09-29)
     writes the STL into that subfolder beside basepath instead of next to
     the STEP, creating it if missing. The STL auto-repair closes hairline
     tessellation cracks on a valid B-rep only: it will not close a missing
@@ -99,8 +109,10 @@ def export_checked(shape, basepath, stl=True, step=True, stl_dir=None, mesh=None
         shape = shape.val()
     if mesh is not None:
         dfl, ang = mesh
-        assert dfl > 0 and ang > 0, f"mesh=(deflection, angular) must both be > 0, got {mesh}"
-    assert shape.isValid(), f"{basepath}: BRep solid is not valid; refusing to export"
+        if not (dfl > 0 and ang > 0):
+            raise GateError(f"mesh=(deflection, angular) must both be > 0, got {mesh}")
+    if not shape.isValid():
+        raise GateError(f"{basepath}: BRep solid is not valid; refusing to export")
     wp = cq.Workplane(obj=shape)
     step_path = basepath + ".step"
     if step:
@@ -139,16 +151,52 @@ def export_checked(shape, basepath, stl=True, step=True, stl_dir=None, mesh=None
                 m, digits = fixed
                 m.export(basepath + ".stl")
                 print(f"stl auto-repaired (merge digits={digits})", flush=True)
-        assert m.is_watertight, (
-            f"{basepath}.stl is NOT watertight ({len(m.faces)} faces) - "
-            "slicer will flag non-manifold; do not print")
-        assert m.is_winding_consistent, f"{basepath}.stl has inconsistent winding"
+        if not m.is_watertight:
+            raise GateError(f"{basepath}.stl is NOT watertight ({len(m.faces)} faces) - "
+                            "slicer will flag non-manifold; do not print")
+        if not m.is_winding_consistent:
+            raise GateError(f"{basepath}.stl has inconsistent winding")
         pinned = "" if mesh is None else f" (mesh {dfl} / {ang})"
         print(f"export ok: {basepath}.stl watertight, {len(m.faces)} faces, "
               f"vol={m.volume:.0f}{pinned}", flush=True)
     if step:
         print(f"export ok: {step_path}", flush=True)
+    if m is not None:
+        ref = _step_shape(step_path) if step else shape
+        off, dv = _check_agreement(ref, m, basepath, agree_tol)
+        print(f"export check: {'STEP' if step else 'shape'} and STL agree, box within {off:.3f} mm, "
+              f"volume within {100 * dv:.2f} %", flush=True)
     return m
+
+
+def _step_shape(path):
+    """The shape a STEP file holds, as one Shape (a compound when it holds several)."""
+    vals = [v for v in cq.importers.importStep(str(path)).vals() if isinstance(v, cq.Shape)]
+    return vals[0] if len(vals) == 1 else cq.Compound.makeCompound(vals)
+
+
+def _check_agreement(ref, m, what, agree_tol):
+    """Gate: the STL mesh m must describe the same part as ref. Mesh vertices lie on
+    the B-rep, so the boxes differ only by the chord sag of curved faces, and the
+    volumes by tessellation error. The B-rep volume is integrated tight (tol 1e-6):
+    at the default tolerance B-spline faces read up to 0.8 % off (2026-11-14 replay).
+    Returns (worst box-side offset in mm, relative volume difference)."""
+    import numpy as np
+    bb = ref.BoundingBox()
+    lo = np.array([bb.xmin, bb.ymin, bb.zmin])
+    hi = np.array([bb.xmax, bb.ymax, bb.zmax])
+    allow = max(0.05, 0.005 * float(np.max(hi - lo)))
+    off = float(max(np.max(np.abs(m.bounds[0] - lo)), np.max(np.abs(m.bounds[1] - hi))))
+    if off > allow:
+        raise GateError(f"{what}: the STL and the STEP disagree on size: a box side is {off:.3f} mm "
+                        f"off (allowed {allow:.3f}); the STL is not this part")
+    v_ref = ref.Volume(tol=1e-6)
+    dv = abs(float(m.volume) - v_ref) / abs(v_ref) if v_ref else float("inf")
+    if dv > agree_tol:
+        raise GateError(f"{what}: the STL and the STEP disagree on volume: {m.volume:.1f} vs "
+                        f"{v_ref:.1f} mm3 ({100 * dv:.2f} %, allowed {100 * agree_tol:.1f} %); the "
+                        "mesh is too coarse, or it is not this part")
+    return off, dv
 
 
 # ── Renders (VTK offscreen, depth-buffered) ──────────────────────────────
@@ -382,12 +430,14 @@ def render_views(items, png_path, views, title=None, size=(800, 640), cols=None,
         shape, colour = it[0], it[1]
         if isinstance(shape, np.ndarray):
             T = np.asarray(shape, dtype=np.float64)
-            assert T.ndim == 3 and T.shape[1:] == (3, 3), f"render_views: triangles must be (N, 3, 3), not {T.shape}"
+            if not (T.ndim == 3 and T.shape[1:] == (3, 3)):
+                raise GateError(f"render_views: triangles must be (N, 3, 3), not {T.shape}")
         else:
             T = _shape_tris(shape, it[2] if len(it) > 2 else tol)
         if len(T):
             tris.append((T, to_rgb(colour)))
-    assert tris, "render_views: no item has any triangles"
+    if not tris:
+        raise GateError("render_views: no item has any triangles")
     imgs = _render_views(tris, [(e, a) for _, e, a in views], size, bg=to_rgb(bg), frame=frame)
 
     n = len(views)
@@ -711,8 +761,10 @@ def set_current(folder, step_file, note=""):
     step = _Path(step_file)
     if not step.is_absolute():
         step = folder / step
-    assert step.exists(), f"set_current: {step} does not exist"
-    assert step.suffix.lower() in (".step", ".stp"), f"set_current wants a STEP file, got {step.name}"
+    if not step.exists():
+        raise GateError(f"set_current: {step} does not exist")
+    if step.suffix.lower() not in (".step", ".stp"):
+        raise GateError(f"set_current wants a STEP file, got {step.name}")
     shape = cq.importers.importStep(str(step)).val()
     fp = fingerprint(shape)
     rec = {"file": step.name, "set": _date.today().isoformat(), "note": note, "fingerprint": fp}
@@ -723,11 +775,12 @@ def set_current(folder, step_file, note=""):
 
 
 def read_current(folder):
-    """The current.json record of a chain folder, or an AssertionError naming
+    """The current.json record of a chain folder, or a GateError naming
     what to run if there is none."""
     cj = _Path(folder) / CURRENT_JSON
-    assert cj.exists(), (f"{cj} is missing: run cq_helpers.set_current(folder, step_file) "
-                         "in the chain folder first (the folder README names the part to print)")
+    if not cj.exists():
+        raise GateError(f"{cj} is missing: run cq_helpers.set_current(folder, step_file) "
+                        "in the chain folder first (the folder README names the part to print)")
     return _json.loads(cj.read_text(encoding="utf-8"))
 
 
@@ -743,9 +796,10 @@ def import_current(folder, pin=None):
     folder = _Path(folder)
     rec = read_current(folder)
     step = folder / rec["file"]
-    assert step.exists(), f"current.json names {rec['file']} but it is not in {folder}"
+    if not step.exists():
+        raise GateError(f"current.json names {rec['file']} but it is not in {folder}")
     if pin is not None and step.stem != pin:
-        raise AssertionError(
+        raise GateError(
             f"chain drift: this script is pinned to {pin} but {folder.name} is now at "
             f"{step.stem} (set {rec.get('set')}{': ' + rec['note'] if rec.get('note') else ''}). "
             "Re-run every fit check against the new parent, then move the pin.")
@@ -753,9 +807,10 @@ def import_current(folder, pin=None):
     fp = fingerprint(shape)
     want = rec.get("fingerprint")
     if want:
-        assert fingerprint_matches(fp, want), (
-            f"{rec['file']} no longer matches its current.json fingerprint "
-            f"(file {fp} vs recorded {want}): the STEP was replaced without set_current")
+        if not fingerprint_matches(fp, want):
+            raise GateError(
+                f"{rec['file']} no longer matches its current.json fingerprint "
+                f"(file {fp} vs recorded {want}): the STEP was replaced without set_current")
     print(f"import_current: {folder.name} -> {rec['file']} (set {rec.get('set')}"
           f"{', ' + rec['note'] if rec.get('note') else ''})", flush=True)
     return shape
@@ -783,20 +838,22 @@ def snap_float32(mesh):
     """Rebuild a trimesh through manifold3d at float32 (what the STL stores),
     so sub-micron edges the rounding zeroes are collapsed HERE instead of
     turning into non-manifold edges on STL reload. Returns a processed
-    trimesh; asserts it is clean and that every vertex is float32-exact,
+    trimesh; raises GateError unless it is clean and every vertex is float32-exact,
     which is the real invariant (2026-09-22)."""
     import numpy as np
     import trimesh
     import manifold3d as m3d
     m = m3d.Manifold(m3d.Mesh(vert_properties=np.asarray(mesh.vertices, dtype=np.float32),
                               tri_verts=np.asarray(mesh.faces, dtype=np.uint32)))
-    assert m.status() == m3d.Error.NoError, f"manifold3d rejected the mesh: {m.status()}"
+    if m.status() != m3d.Error.NoError:
+        raise GateError(f"manifold3d rejected the mesh: {m.status()}")
     rm = m.to_mesh()
     out = trimesh.Trimesh(vertices=np.asarray(rm.vert_properties, dtype=np.float64)[:, :3],
                           faces=np.asarray(rm.tri_verts), process=True)
-    assert out.is_watertight and out.is_winding_consistent, "float32 rebuild left the mesh unclean"
-    assert np.array_equal(out.vertices, out.vertices.astype(np.float32).astype(np.float64)), (
-        "vertices are not float32-exact, so the STL write would move (and merge) some")
+    if not (out.is_watertight and out.is_winding_consistent):
+        raise GateError("float32 rebuild left the mesh unclean")
+    if not np.array_equal(out.vertices, out.vertices.astype(np.float32).astype(np.float64)):
+        raise GateError("vertices are not float32-exact, so the STL write would move (and merge) some")
     return out
 
 
@@ -804,7 +861,7 @@ def mesh_to_solid(mesh, sew_tol=1e-5):
     """Wrap a clean triangle mesh as an OCCT solid (one planar face per
     triangle) so a mesh-only part can go through export_checked.
     BRepBuilderAPI_MakeShapeOnMesh returns a COMPOUND of faces and silently
-    drops zero-area triangles, so the faces are sewn shut (assert 0 free
+    drops zero-area triangles, so the faces are sewn shut (0 free
     edges) rather than stacked into a shell. 36k triangles take about 10 s.
     Export the result with step=False; a STEP of 36k planar faces is not a
     useful file."""
@@ -826,13 +883,15 @@ def mesh_to_solid(mesh, sew_tol=1e-5):
     sew = BRepBuilderAPI_Sewing(sew_tol)
     sew.Add(faces.Shape())
     sew.Perform()
-    assert sew.NbFreeEdges() == 0, f"{sew.NbFreeEdges()} free edges left after sewing"
+    if sew.NbFreeEdges() != 0:
+        raise GateError(f"{sew.NbFreeEdges()} free edges left after sewing")
     shells = []
     exp = TopExp_Explorer(sew.SewedShape(), TopAbs_SHELL)
     while exp.More():
         shells.append(TopoDS.Shell_s(exp.Current()))
         exp.Next()
-    assert len(shells) == 1, f"sewing gave {len(shells)} shells, expected 1"
+    if len(shells) != 1:
+        raise GateError(f"sewing gave {len(shells)} shells, expected 1")
     solid = BRepBuilderAPI_MakeSolid(shells[0]).Solid()
     BRepLib.OrientClosedSolid_s(solid)
     return cq.Solid(solid)

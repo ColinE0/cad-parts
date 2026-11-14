@@ -16,6 +16,7 @@
 #   - timeout and cap kills use TerminateJobObject, which ends every process
 #     in the tree, and KILL_ON_JOB_CLOSE ends it too if this runner dies (tool
 #     timeout, closed terminal, Ctrl+C).
+# The build always starts without PYTHONOPTIMIZE, so a script's own asserts run (2026-11-14).
 # Exit codes: the script's own code on normal exit, 137 on watchdog kill, 2 if
 # the script path is missing, 3 if the watchdog could not be armed (the script
 # never ran).
@@ -319,8 +320,16 @@ try {
 try {
     try {
         $cwd = (Get-Location -PSProvider FileSystem).ProviderPath
-        $sw = [System.Diagnostics.Stopwatch]::StartNew()
-        $null = $job.Start("`"$py`" -u `"$Script`"", $cwd, $out, $err)
+        # A PYTHONOPTIMIZE setting would strip every assert a part script uses as a check
+        # (bbox asserts, guard formulas). The build starts without it; the caller keeps it.
+        $savedOptimize = $env:PYTHONOPTIMIZE
+        Remove-Item Env:PYTHONOPTIMIZE -ErrorAction SilentlyContinue
+        try {
+            $sw = [System.Diagnostics.Stopwatch]::StartNew()
+            $null = $job.Start("`"$py`" -u `"$Script`"", $cwd, $out, $err)
+        } finally {
+            if ($null -ne $savedOptimize) { $env:PYTHONOPTIMIZE = $savedOptimize }
+        }
     } catch {
         Write-Host "WATCHDOG SETUP FAILED: $($_.Exception.Message)"; exit 3
     }

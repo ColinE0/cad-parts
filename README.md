@@ -37,7 +37,7 @@ those failures on real parts:
 | What goes wrong | What the skill does about it |
 |---|---|
 | A CAD job inside a long-running process ran away with memory and took the whole machine down. | Every script runs in a Windows job object with a kernel-enforced memory cap and a timeout over the whole process tree. A runaway loses one run, not the machine. |
-| A B-rep that passes `isValid()` still exports an STL the slicer calls non-manifold. | `export_checked` gates every export: valid solid, watertight and consistently wound STL, gentle auto-repair only when the volume moves less than 0.5 %. |
+| A B-rep that passes `isValid()` still exports an STL the slicer calls non-manifold. | `export_checked` gates every export: valid solid, watertight and consistently wound STL, gentle auto-repair only when the volume moves less than 0.5 %, and an STL that matches the STEP read back from disk in size and volume. |
 | Dimensions get "verified" by asserting an input constant against itself. | Features are checked by measuring the built solid, and a 6-view render is read before anything is reported. |
 | The model edits the script for a part that already printed and fit, and the working version is gone. | Every script carries a `STATUS:` line. FROZEN parts are never edited; variants get a new file that names its delta. |
 | A part passes every fit check and still cannot be printed: a pillar starts in mid-air on supports and snaps off partway through a 22-hour print. | `islands()` slices the part in its print orientation and flags material that starts above the bed. |
@@ -120,7 +120,14 @@ Windows 10 or 11, about 10 minutes, once.
    It creates `C:\cadquery-venv` (Python 3.14 and the exact versions in
    `setup\requirements.txt`, a few hundred MB), installs `cq_helpers.py` into it, copies the
    skill to `%USERPROFILE%\.claude\skills\cad-parts`, and runs the self-test through the runner.
-   It ends with `DONE` and "All set". Re-running is safe; `-Force` replaces an installed skill.
+   It ends with `DONE` and "All set".
+
+   Re-running is safe: a matching install is left as it is and tested again. If a different
+   copy is installed (an older version, or one you edited, such as your parts folder written
+   into `SKILL.md`), the installer stops before changing anything. `-Force` then updates the
+   skill and its helpers together and keeps the old folder in
+   `%USERPROFILE%\.claude\cad-parts-backups`. For a venv somewhere else, pass `-VenvPath` and
+   set `CADPARTS_PYTHON` to its `python.exe`.
 4. Restart Claude Code.
 
 ## Use
@@ -142,7 +149,7 @@ flowchart LR
     Q -- no --> S
     D --> S[Part script<br/>named constants, asserts,<br/>STATUS line]
     S --> R[run_watchdogged.ps1<br/>job object: 4 GB commit cap,<br/>300 s timeout, kill-on-close]
-    R --> E[export_checked<br/>valid B-rep + watertight,<br/>consistently wound STL]
+    R --> E[export_checked<br/>valid B-rep + watertight,<br/>consistently wound STL<br/>that agrees with its STEP]
     E --> V[render6 / render_compare<br/>read before reporting]
     V --> I[islands in the<br/>print orientation]
     I --> F[Part folder<br/>README names the file to print]
@@ -154,16 +161,32 @@ eats gigabytes. The runner starts the launcher suspended, puts it in a job objec
 job-wide committed-memory limit and kill-on-close, then resumes it. The interpreter and anything
 it spawns are born inside the job. An allocation past the cap is refused by the kernel, the
 runner kills the tree with `TerminateJobObject`, and if the runner itself dies the job takes the
-tree with it. It compiles its C# with Windows PowerShell 5.1 too.
+tree with it. It compiles its C# with Windows PowerShell 5.1 too. Every build starts without
+`PYTHONOPTIMIZE`, so a part script's own asserts always run.
 
-**The export gate.** `export_checked` asserts B-rep validity, writes the STEP, meshes a copy of
+**The export gate.** `export_checked` requires a valid B-rep, writes the STEP, meshes a copy of
 the shape (so the caller's solid is never meshed in place), and reloads the STL with trimesh:
-watertight, consistent winding, else a gentle vertex merge and hole fill that is kept only if the
-volume moves less than 0.5 %. Anything else stops the build.
+watertight, consistent winding, else a gentle repair that is kept only if the volume moves less
+than 0.5 %. The repair can only merge vertices closer than 0.0001 mm and patch gaps three or four
+edges wide, so it cannot erase a rib or close a real hole. Then the STEP is read back from disk
+and the STL has to agree with it: bounding box within 0.05 mm or 0.5 % of the part's size,
+volume within 1.5 %. Every check raises `GateError` explicitly rather than using `assert`, so
+`python -O` cannot switch the gate off. Any failed check stops the build.
 
 **Islands.** `islands(part, up="+z")` slices the part every layer in its print orientation and
 joins regions layer to layer by overlap. A region that starts above the bed and only later joins
 grounded material is an island; tall or slender ones are rated HIGH.
+
+**What "checked" means.** The skill keeps three levels apart, and only you can grant the last:
+
+1. **Checked:** every gate above passed, and so did the script's own asserts on the measured
+   part (bounding box, feature sizes, clearance to modeled hardware).
+2. **Print-checked:** `islands()` found nothing HIGH in the orientation the part will print in.
+   That is a heuristic, not a printability guarantee: there is no minimum wall-thickness or
+   feature-size check yet.
+3. **Physically tested:** printed, and you said it fits. Only then does the script's `STATUS:`
+   line change from `trial, unprinted` to something like `printed 2026-09-08 (K2), fitted,
+   FROZEN`. A FROZEN script is never edited again; changes go into a new file.
 
 **The rest of `cq_helpers`.** `describe`/`diff`/`is_noop` (geometry truth blocks, and a check
 for OpenCASCADE silently returning its input unchanged), `interference` (numeric overlap and

@@ -197,13 +197,18 @@ step 10c through nine such deltas). Rules:
 
 ## cq_helpers API (venv site-packages)
 
-- `export_checked(shape, basepath, stl=True, step=True, stl_dir=None, mesh=None)`: accepts
-  Workplane or Shape; asserts `isValid()`; writes `.step`/`.stl` (the STL into
+- `export_checked(shape, basepath, stl=True, step=True, stl_dir=None, mesh=None, agree_tol=0.015)`:
+  accepts Workplane or Shape; requires `isValid()`; writes `.step`/`.stl` (the STL into
   `<dir of basepath>/<stl_dir>/` when `stl_dir` is set, always `"stl"` here); trimesh watertight +
   winding gate on the STL with auto-repair (merge_vertices digits 5 then 4,
-  fill_holes, fix_normals, accepted only if volume drift < 0.5%). Returns the
-  trimesh mesh. Asserts (crashes the run) if the mesh cannot be made clean.
-  Prints one `export ok:` line per file written, full path with extension.
+  fill_holes, fix_normals, accepted only if volume drift < 0.5%); then the STL
+  must agree with the STEP read back from disk (or with shape when `step=False`):
+  bounding box within max(0.05 mm, 0.5 % of the part's largest size) per side,
+  volume within `agree_tol`. Returns the trimesh mesh. Every failed check raises
+  `h.GateError` (an AssertionError subclass, raised explicitly so `python -O`
+  cannot skip it), which stops the run. Prints one `export ok:` line per file
+  written, full path with extension, and one `export check:` line with the
+  agreement numbers.
   The auto-repair closes hairline tessellation cracks on a valid B-rep; it
   will NOT close a missing face (see "Repairing a mesh the user hands over").
   The STL is meshed on a fresh copy (shape stays unmeshed), so a mesh pinned

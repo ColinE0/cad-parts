@@ -25,3 +25,7 @@ jobs:
       - name: Run setup/install.ps1 exactly as a user would (venv, helpers, skill, self-test)
         shell: pwsh
         run: powershell -ExecutionPolicy Bypass -File .\setup\install.ps1
+
+      - name: Run it again (a matching install must be left as it is and pass again)
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File .\setup\install.ps1
