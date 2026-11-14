@@ -6,7 +6,7 @@ v2 delta (from v1): bar 6 mm lower so it catches the doorframe instead of the sh
 
 STATUS: printed 2026-11-01, fitted, FROZEN.
 Axes: scout_refs.py, modelled where it sits on the robot.
-Prints on its back: the bar's rear face on the bed.
+Prints as modelled: the bar's bottom face on the bed.
 
 Run:  python front_bumper_v2.py
 Writes front_bumper_v2.step and stl/front_bumper_v2.stl beside this script.

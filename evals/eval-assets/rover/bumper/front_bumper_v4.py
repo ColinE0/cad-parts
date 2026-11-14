@@ -5,7 +5,7 @@ v4 delta (from v3): bar 4 -> 6 mm thick after v3 cracked on the doorframe.
 
 STATUS: printed 2026-10-08, fitted, FROZEN.
 Axes: rover_refs.py (z up, plate top face at z 0, +y forward).
-Prints on its back: the bar's rear face on the bed.
+Prints as modelled: the bar's bottom face on the bed.
 
 Run:  python front_bumper_v4.py
 Writes front_bumper_v4.step and stl/front_bumper_v4.stl beside this script.
