@@ -57,8 +57,11 @@ those failures on real parts:
 
 ## Results
 
-Six eval prompts, three setups, 18 headless Claude Code runs on 2026-11-14 (one run per cell;
-full write-up in [evals/RESULTS.md](evals/RESULTS.md)):
+Eight eval prompts, three setups, 24 headless Claude Code runs on 2026-11-14, one run per cell
+(full write-up in [evals/RESULTS.md](evals/RESULTS.md)).
+
+**The first six:** a spacer from a spec, a variant of a frozen part, a broken STL, a bracket on a
+chained plate, a bracket from a drawing, and a build the memory cap keeps killing.
 
 | | Fable 5.1 medium + skill | Fable 5.2 high + skill | Fable 5.2 high, no skill |
 |---|---|---|---|
@@ -70,11 +73,30 @@ full write-up in [evals/RESULTS.md](evals/RESULTS.md)):
 | Memory kill diagnosed without raising the cap | yes | yes | no |
 | Tokens / cost at API list prices, all six | 2.15 M / $6.18 | 2.23 M / $7.28 | 1.08 M / $3.46 |
 
-The honest reading: on small parts, a current model gets the geometry right on its own. The skill
-does not make it smarter there; it makes the work safe and checkable. No CAD process ran
-uncapped, every part passed the watertight gate and a render that was actually opened, and the
-memory kill got the right answer instead of "raise the limit". It costs about twice the tokens.
-These six evals are too easy to show the failures the skill was built from; harder ones are next.
+**Two harder ones,** rebuilt from failures the skill was written after: a tunnel cut that leaves
+a post hanging in mid-air, and a bracket script still pointing at a plate the chain has moved
+past.
+
+| | Fable 5.1 medium + skill | Fable 5.2 high + skill | Fable 5.2 high, no skill |
+|---|---|---|---|
+| Hanging post caught; delivered part island-free, measured | yes | yes | yes |
+| Moved plate caught; bracket fits the live plate, measured | yes | yes | yes |
+| Island measured with `islands()`, not just reasoned about | no | yes | no |
+| Next plate move fails loudly (parent pinned in the script) | yes | yes | no |
+| CadQuery processes run with no memory cap | 1 | 0 | 5 |
+| STL checked watertight / render made and opened | 2/2, 2/2 | 2/2, 2/2 | 1/2, 0/2 |
+| Tokens / cost at API list prices, both | 1.19 M / $3.17 | 1.09 M / $3.60 | 0.33 M / $1.24 |
+
+The honest reading: on small parts, a current model gets the geometry right on its own, and in a
+short prompt about a small part it also spots the two failures the harder evals rebuild. The
+skill does not make it smarter there; it makes the work safe and checkable. It measures what the
+bare model reasons about, keeps CAD processes behind the memory cap (one slip in 16 skill runs:
+a bare `python -c` that imported the helpers to read their signatures), gets the memory kill
+right instead of "raise the limit", and pins a dependent part to its parent so the next change
+fails loudly instead of passing quietly. It costs two to four times the tokens. The original
+failures happened deep in long sessions on large parts; evals that bury them that deep are next.
+A ninth prompt, a non-uniform scale of an imported STEP, is built but was not run: replayed under
+the runner, the op once blamed for a machine crash finished in 0.24 s with no extra memory.
 
 ## Install
 
@@ -155,7 +177,7 @@ covers all of it with plain asserts.
 | `cad-parts/scripts/test_cq_helpers.py` | self-test for the helpers (11 groups, ends with `DONE`) |
 | `cad-parts/venv-modules/cq_helpers.py` | export gate, renders, islands, interference, chain pointer |
 | `setup/` | `install.ps1` and the pinned `requirements.txt` |
-| `evals/` | the 6 eval prompts, their input files, the harness and the grader |
+| `evals/` | the 9 eval prompts (eval 7 built, not run), their input files, the harness and the grader; `harness/make_assets.py` rebuilds the binary inputs |
 | `.github/workflows/selftest.yml` | CI: runs `install.ps1` on a clean Windows runner |
 
 ## Reproduce the evals
@@ -178,8 +200,10 @@ pwsh -File harness\run_batch.ps1 -Jobs fable52-high:skill:1,fable52-high:baselin
 
 `run_eval.ps1` finds the Claude desktop app's bundled CLI by default; pass `-ClaudeExe` to use
 another. `grade.py` measures every STL and STEP a run produced, checks the inputs are
-byte-identical afterwards, and reads the transcript for how many Python runs went through the
-runner, which renders were opened, and any path the run touched outside its own folder.
+byte-identical afterwards, runs each eval's own checks (a bracket's seat and hole axes, the sled's
+clearance plus an island check, which plate a bracket fits), and reads the transcript for how
+many Python runs went through the runner, which renders were opened, and any path the run
+touched outside its own folder.
 
 ## Limitations
 
@@ -187,8 +211,9 @@ runner, which renders were opened, and any path the run touched outside its own 
   would need the same idea through cgroups or `setrlimit`; not written yet.
 - **CadQuery / OpenCASCADE only**, and the defaults lean FDM and PLA (fastener clearances, the
   island risk thresholds).
-- **Six evals, one run per configuration.** Model output varies run to run, so each cell in the
-  results is one sample, not a rate.
+- **Eight evals run, one run per configuration.** Model output varies run to run, so each cell in
+  the results is one sample, not a rate. The two harder evals rebuild their failures on small
+  parts in short prompts, where the bare model catches them too.
 - **The baseline has no helper library.** "No skill" also means no `cq_helpers`, so the
   comparison is skill plus helpers against the bare model in the same venv.
 - **Headless runs cannot ask questions.** Both arms were told to write questions and assumed

@@ -1,0 +1,15 @@
+{
+  "file": "plate_step2.step",
+  "set": "2026-11-14",
+  "note": "step2 is the plate to print: 1 mm thicker, 6 mm wider, bolt holes moved out to x = +-28 for the battery tray",
+  "fingerprint": {
+    "volume_mm3": 13039.15,
+    "faces": 10,
+    "edges": 24,
+    "bbox_mm": [
+      66.0,
+      40.0,
+      5.0
+    ]
+  }
+}

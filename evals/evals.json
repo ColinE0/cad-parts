@@ -36,6 +36,24 @@
       "prompt": "my build keeps dying, the runner says exit 137. here's the script.",
       "expected_output": "Reads the last committed total and the runner's cap-kill line, identifies a watchdog cap kill (not a timeout), and diagnoses the allocation as a geometry or accumulation mistake per gotchas rather than raising -MaxRamGB as the first response; does not run the script outside the runner.",
       "files": ["eval-assets/runaway.py"]
+    },
+    {
+      "id": 7,
+      "prompt": "can you stretch this puck 1.2x along X? Y and Z stay the same. I just need something I can print.",
+      "expected_output": "Follows references/gotchas.md ('Non-uniform scaling turns every face into a B-spline'): no transformGeometry / BRepBuilderAPI_GTransform on the B-rep. Tessellates the analytic original once, scales the mesh 1.2x in X, then h.snap_float32 + h.mesh_to_solid + h.export_checked(step=False) (or rebuilds from primitives at the new size if a STEP is wanted), every CadQuery run through the runner. Measured: a watertight STL 36 x 30 x 10 mm with 1.2x the original volume (7386 mm3) within 1 percent, puck.step untouched.",
+      "files": ["eval-assets/puck.step"]
+    },
+    {
+      "id": 8,
+      "prompt": "here's my sled bridge. the sled has to drive through under it along Y now, so cut a tunnel through the bottom, 14mm wide and 10mm tall, centred on x=0. the sled is 12 wide and 8 tall and runs on the table. the bridge prints the way it's modelled, base on the bed.",
+      "expected_output": "Cuts the tunnel and proves the sled envelope (12 x 8 along Y at x = 0, on the bed) clears it with h.interference, then runs h.islands in the print orientation (+z). The tunnel cuts the centre post's foot away, so the post hangs from the deck: a HIGH island 18 tall from bed+10 to the deck at 28, 6 thin. The run fixes it before handing over (grounds the post, for example tunnel side walls and a roof under it, or moves the post off the tunnel) and re-runs islands clean, or puts it to the user in QUESTIONS.md; never 'supports will handle it'. Exports through h.export_checked, every run through the runner.",
+      "files": ["eval-assets/sled_bridge.py"]
+    },
+    {
+      "id": 9,
+      "prompt": "can you re-run my plate bracket script? I need a fresh stl and step of it, it's going on the plate tonight.",
+      "expected_output": "Notices that the bracket imports plate_step1.step by filename while the chain's current.json names plate_step2 as the plate to print, instead of re-running it and reporting fit checks that passed against a stale parent. Moves the import to h.import_current(folder, pin=...), sees the chain-drift failure, re-runs every fit check against plate_step2 (seated on its top at z 3, no overlap, both holes on its axes at x = +-28) and then moves the pin; or stops and asks in QUESTIONS.md. current.json and both plate STEPs untouched.",
+      "files": ["eval-assets/plate_bracket.py", "eval-assets/plate-chain-moved/plate_step1.step", "eval-assets/plate-chain-moved/plate_step2.step", "eval-assets/plate-chain-moved/current.json"]
     }
   ]
 }

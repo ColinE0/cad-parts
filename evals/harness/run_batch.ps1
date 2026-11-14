@@ -7,6 +7,8 @@ param(
 $pwsh = (Get-Process -Id $PID).Path
 $runner = Join-Path $PSScriptRoot 'run_eval.ps1'
 $logDir = Join-Path (Split-Path -Parent $PSScriptRoot) 'logs'
+# Start-Process cannot redirect into a missing folder, and run_eval.ps1 only makes it once it runs
+New-Item -ItemType Directory -Force $logDir | Out-Null
 $queue = [System.Collections.Generic.Queue[string]]::new([string[]]($Jobs | ForEach-Object { $_ -split ',' } | Where-Object { $_ }))
 $running = @()
 $t0 = Get-Date
@@ -17,6 +19,10 @@ while ($queue.Count -or $running.Count) {
         $out = Join-Path $logDir "$c.$a.eval-$e.harness.txt"
         $p = Start-Process -FilePath $pwsh -ArgumentList @('-NoProfile', '-File', $runner, '-Config', $c, '-Arm', $a, '-EvalId', $e) `
             -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden -PassThru
+        if (-not $p) {   # a failed launch must not sit in $running forever
+            Write-Host ("{0:HH:mm:ss} FAILED to start {1}" -f (Get-Date), $j)
+            continue
+        }
         $running += [pscustomobject]@{ Job = $j; Proc = $p; Out = $out }
         Write-Host ("{0:HH:mm:ss} started {1}" -f (Get-Date), $j)
         Start-Sleep -Seconds 5   # stagger CLI start-up
