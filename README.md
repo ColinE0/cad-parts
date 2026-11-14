@@ -18,6 +18,7 @@ printed and fit is never edited in place.
 - [Why this exists](#why-this-exists)
 - [What it does](#what-it-does)
 - [Results](#results)
+- [Physical record](#physical-record)
 - [Install](#install)
 - [Use](#use)
 - [How it works](#how-it-works)
@@ -101,6 +102,57 @@ large shell, a project with a deep plate chain, a four-item punch list) are buil
 grading checked against hand-made answers; they have not been run yet.
 A ninth prompt, a non-uniform scale of an imported STEP, is built but was not run: replayed under
 the runner, the op once blamed for a machine crash finished in 0.24 s with no extra memory.
+
+## Physical record
+
+The evals are small prompts. The real record is every print reported since this workflow started
+on 2026-07-15: 79 printed revisions of parts made with it, 53 of them with a reported verdict.
+
+| Outcome | Prints |
+|---|---|
+| Worked | 21 |
+| Failed: the geometry was wrong | 18 |
+| Failed: a number or requirement in the request was wrong | 8 |
+| Failed: the printer or slicer | 4 |
+| Failed: cause not established | 2 |
+
+There were also 12 deliberate fit-tuning series (bore and spacing ladders, at least 20 prints) and
+14 printed parts with no recorded outcome. The tally comes from the parts' `STATUS:` lines, the
+part-folder notes and the session history; most verdicts are a fit by hand, not a measurement.
+
+**What it says about the checks.** Only 2 of the 18 geometry failures would be caught by a gate
+in the skill today: a pillar that printed in mid-air (`islands()` exists because of it) and a lid
+that would not close (`interference()`). The other 16 were insertion paths blocked by a feature,
+loads that crushed or split a part, a vendor model that did not match the real part, and
+tolerances and threads that took a ladder to find. No print failed because a working part was
+edited or an STL was bad: those gates stop their problems before the printer does. The next
+checks belong where the failures are: insertion paths, a minimum clearance rather than zero
+overlap, and measuring the real part before trusting its model.
+
+### Example: the wheels
+
+![Three printed, fitted parts: the wheel adapter cut open to show its two corner ears, a hub cheek with ball sockets for the real rollers, and the final ten-spoke cheek](docs/wheel-chain.png)
+
+A small mecanum robot's wheels took 17 recorded print outcomes from July to October:
+
+| Date | Print | Outcome |
+|---|---|---|
+| 08-07 | five-rung bore ladder for the motor-to-wheel adapter | 3.15 mm glove tight, 3.10 would not go on, 3.05 had to be forced |
+| 08-12 | the adapters on the assembled robot | some wheels rub the body: the CAD had a zero gap, which an overlap check reads as fine |
+| 09-26 | the ear ladder ([worked example](examples/n20-ear-ladder)) | the 3.10 bore slides on with two corner ears: "the ears were perfect", and every adapter since has them |
+| 09-28 | hub cheeks cut from the vendor's wheel model | the real rollers would not go in |
+| 09-28 to 09-29 | cheeks with Ø3.5 ball sockets, plus a 1.0 mm spacer ring | the rollers spin free; frozen |
+| 09-29 | a plain cheek with the vendor's Ø1.6 screw posts | two posts split |
+| 10-24 | the real rollers, calipered | 19.42 mm long (model 19.50), ball ends Ø3.04 (model 3.0) |
+| 10-24 to 10-26 | ten-spoke wheel, five tuning prints | rollers rubbing, then "pretty good", 0.15 mm short, rims dragging on the floor, and finally too tight (reverted) |
+| 10-27 | a wedge coupon that tests roller spacing without a whole wheel | "did great", and picked the final spacing |
+| 10-27 | the final ten-spoke wheels, left and right | "perfect" |
+| 10-28 | the same wheels with engraved L/R marks | one wheel struggles to turn; cause not established |
+
+The adapter's ear ladder is published in full in [examples/n20-ear-ladder](examples/n20-ear-ladder):
+the frozen script, its falsifiable prediction, every rung's STEP, STL and render, and a rebuild that
+reproduces the printed rungs' volumes exactly. The cheeks and wheels are built on the wheel
+vendor's CAD model, so only their renders are shown.
 
 ## Install
 
@@ -205,7 +257,8 @@ covers all of it with plain asserts.
 | `cad-parts/venv-modules/cq_helpers.py` | export gate, renders, islands, interference, chain pointer |
 | `setup/` | `install.ps1` and the pinned `requirements.txt` |
 | `evals/` | the 12 eval prompts (7 and 10 to 12 built, not run), their input files and project folders, the harness and the grader; `harness/make_assets.py` rebuilds the binary inputs |
-| `docs/` | the picture above and `make_readme_image.py`, which draws it from eval 8's part with the helpers |
+| `examples/n20-ear-ladder/` | a complete worked example: a frozen, printed and fitted part's script, its STEP, STL and renders, and a rebuild log |
+| `docs/` | the pictures: `island-check.png` (drawn by `make_readme_image.py` from eval 8's part) and `wheel-chain.png` (rendered from the wheel parts; the cheeks' CAD is the vendor's, so that script stays private) |
 | `.github/workflows/selftest.yml` | CI: runs `install.ps1` on a clean Windows runner |
 
 ## Reproduce the evals

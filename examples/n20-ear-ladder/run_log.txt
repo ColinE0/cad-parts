@@ -1,0 +1,34 @@
+seating: mouth stops 2.0mm off the motor face, 8.0mm of shaft engaged, grub +0.8mm onto the flat
+ears: Ø1.0 x 9.0 long, z -1.0 to +8.0
+
+control: shipped 3.15 geometry reproduces at 508.8 mm3 (validated 508.8) OK
+
+A  bore 3.15 / flat 2.55  vol 500.1 mm3 (ears removed 8.8)
+   surface clearance +0.15 round / +0.15 flat, wall at ear 1.02mm
+   without ears this rung was: shipped demo fit, was glove tight without ears
+export ok: .\A bore 3.15 + ears\adapter_ear_A_b315.stl watertight, 4080 faces, vol=500
+export ok: .\A bore 3.15 + ears\adapter_ear_A_b315.step
+export check: STEP and STL agree, box within 0.002 mm, volume within 0.02 %
+render6 -> .\A bore 3.15 + ears\adapter_ear_A_b315.png
+B  bore 3.1 / flat 2.5  vol 502.3 mm3 (ears removed 8.8)
+   surface clearance +0.10 round / +0.10 flat, wall at ear 1.05mm
+   without ears this rung was: DECISIVE: did not go on without ears
+export ok: .\B bore 3.10 + ears\adapter_ear_B_b310.stl watertight, 5410 faces, vol=502
+export ok: .\B bore 3.10 + ears\adapter_ear_B_b310.step
+export check: STEP and STL agree, box within 0.002 mm, volume within 0.02 %
+render6 -> .\B bore 3.10 + ears\adapter_ear_B_b310.png
+C  bore 3.05 / flat 2.45  vol 504.6 mm3 (ears removed 8.8)
+   surface clearance +0.05 round / +0.05 flat, wall at ear 1.08mm
+   without ears this rung was: had to be forced to even start without ears
+export ok: .\C bore 3.05 + ears\adapter_ear_C_b305.stl watertight, 5384 faces, vol=505
+export ok: .\C bore 3.05 + ears\adapter_ear_C_b305.step
+export check: STEP and STL agree, box within 0.002 mm, volume within 0.02 %
+render6 -> .\C bore 3.05 + ears\adapter_ear_C_b305.png
+D  bore 3.0 / flat 2.4  vol 506.7 mm3 (ears removed 8.8)
+   surface clearance +0.00 round / +0.00 flat, wall at ear 1.10mm
+   without ears this rung was: nominal, never tested without ears
+export ok: .\D bore 3.00 + ears\adapter_ear_D_b300.stl watertight, 4740 faces, vol=507
+export ok: .\D bore 3.00 + ears\adapter_ear_D_b300.step
+export check: STEP and STL agree, box within 0.002 mm, volume within 0.02 %
+render6 -> .\D bore 3.00 + ears\adapter_ear_D_b300.png
+DONE
