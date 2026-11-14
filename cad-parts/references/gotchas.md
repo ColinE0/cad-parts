@@ -3,8 +3,9 @@
 ## Non-uniform scaling turns every face into a B-spline
 `transformGeometry` with a non-uniform scale converts every analytic face
 (cylinders, cones, tori) into BSplines. The result stays valid and its volume
-exact, but later operations get fragile: `shell` and offset fail on the B-spline
-faces, and the mesh comes out about twice as dense. Avoid it: rebuild the part
+exact, but later operations get fragile: an offset (+0.3 mm) that works on the
+analytic part fails on the stretched one, and the mesh comes out about twice as
+dense. Avoid it: rebuild the part
 parametrically from primitives, cut the analytic features off before scaling,
 or (for print-bound parts) scale the STL *mesh* instead of the B-rep.
 

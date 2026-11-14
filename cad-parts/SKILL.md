@@ -193,7 +193,7 @@ step 10c through nine such deltas). Rules:
   docstring, NAME and the parameter differ) plus `describe()` against the
   analytic volume. No geometry-diff probe needed.
 - A non-uniform scale turns every face of an imported B-rep into a B-spline
-  (gotchas): shell and offset fail after it. Rebuild, or scale the mesh.
+  (gotchas): offsets can fail after it. Rebuild, or scale the mesh.
 
 ## cq_helpers API (venv site-packages)
 
