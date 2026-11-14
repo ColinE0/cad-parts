@@ -11,7 +11,8 @@
 # Arms: "skill" gets the skill-under-test folder (read-only) named in an appended system prompt,
 # its runner pointed at the eval venv, and the skill's cq_helpers on PYTHONPATH. "baseline" gets
 # the same environment note and nothing else. The user prompt is the eval prompt verbatim plus an
-# "Attached:" line for its input files.
+# "Attached:" line for its input files. An input that is a folder (evals 10 to 12: a part folder
+# or a whole project) is copied with everything in it and attached as one item.
 #
 # Writes runs\<config>\<arm>\eval-<id>\ (the agent's working folder) and
 # logs\<config>.<arm>.eval-<id>.{prompt.txt,system.txt,stream.jsonl,err.txt,status.json}.
@@ -60,10 +61,10 @@ if (Test-Path $runDir) { throw "$runDir already exists; move it aside to re-run"
 New-Item -ItemType Directory -Force $runDir, $logDir | Out-Null
 $attached = @()
 foreach ($f in $eval.files) {
-    $src = Join-Path $specDir $f
-    $dst = Join-Path $runDir $f
+    $src = (Join-Path $specDir $f).TrimEnd('\', '/')
+    $dst = (Join-Path $runDir $f).TrimEnd('\', '/')
     New-Item -ItemType Directory -Force (Split-Path $dst -Parent) | Out-Null
-    Copy-Item $src $dst
+    if (Test-Path $src -PathType Container) { Copy-Item $src $dst -Recurse } else { Copy-Item $src $dst }
     $attached += $f
 }
 

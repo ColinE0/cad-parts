@@ -8,7 +8,9 @@ Two batches on the same day, each in the same three arms, one run per cell:
 
 Batch 1 ran the six original prompts (evals 1 to 6). Batch 2 ran two harder prompts rebuilt from
 failures the skill was written after (evals 8 and 9). A third hard prompt, eval 7, is built but
-was not run; see [Eval 7: built, not run](#eval-7-built-not-run).
+was not run; see [Eval 7: built, not run](#eval-7-built-not-run). Evals 10 to 12 bury batch 2's
+two failures the way the originals were buried; they are built and their grading is checked, but
+they have not been run; see [Batch 3](#batch-3-evals-10-to-12-built-not-run).
 
 Every run was headless Claude Code 2.1.325 (`claude -p --safe-mode`, no session persistence, web
 tools off) in its own fresh folder, inside a job object with a 12 GB cap. The user prompt was the
@@ -173,6 +175,46 @@ three to four times the tokens (under three times the cost) and over twice the w
 A harder test of the claim would bury the same failures the way the originals were buried: a
 larger part, a deeper chain, or the failure met late in a long session.
 
+## Batch 3: evals 10 to 12, built, not run
+
+The same two failures, buried the way the originals were. Each eval hands the run a folder: a part
+folder or a whole project.
+
+| # | Prompt, abridged (verbatim in `evals.json`) | How the failure is buried |
+|---|---|---|
+| 10 | "the shell needs a slot across the bottom for [the new battery tray]: 40mm wide and 12mm tall, centred on y=0, right through both sides" | a 230 mm robot shell with a dozen features (arches, hatch, wing, bosses, windows, vents), fit-checked in its own script against 19 chassis parts. The arches already narrow the side wall between the front and rear tyres to 36.5 mm at the bed, so the 40 mm slot takes its whole foot. Nothing names that wall. |
+| 11 | "can you add two M2 pilot holes to the sled's front lip for the new IR board? ... need a fresh stl to print tonight." | a project folder. The base plate is a chain (steps 8c, 9, 10 and 10c, each a script and a STEP, `current.json` on 10c), and the sled reaches it through `rover_refs.py`, a helper the project's parts share, which loads step 8c by filename. The request is about something else. |
+| 12 | four edits to four parts; the last is "the new wheels are 60mm (were 52), open the shell's wheel arches to suit, same clearance as now" | the trap is the fourth of four routine edits, and no cut is asked for: the shell's existing dock slot left the wall between the arches 2.2 mm of foot each side, and the bigger arches take it. |
+
+The prompts name neither the hanging wall nor the plate. Every input script was built under the
+runner and passes its own checks. Measured (islands at 0.2 mm layers, printed upright as the
+scripts say):
+
+- **Eval 10.** The shell as given: no islands. With only the requested slot: two HIGH islands,
+  one per side, 19.2 mm tall from bed+4.8 to the arch crowns at bed+24, 0.07 mm thin where they
+  start. The tray and all four tyres clear, and every check in the shell script still passes.
+- **Eval 11.** The sled as given passes all its checks against step 8c. Against step 10c, the
+  plate on the robot, it overlaps the plate by 1172.7 mm³ (10c is 1 mm thicker underneath) and
+  neither bolt hole lands on a sled hole (they moved 6 mm forward). Built against 10c, it fits.
+- **Eval 12.** The shell as given: no islands. With the arches opened to R32 for 60 mm tyres: two
+  HIGH islands, 18.4 mm tall from bed+5.6 to bed+24. The tyres, the dock bar and every check in
+  the script still pass.
+
+The grading (`eval10_check`, `eval11_check` and `eval12_check` in `grade.py`) was run on a
+scratch copy of the run layout holding a hand-made bad and good answer for each eval, with
+stand-in transcripts:
+
+| | Bad answer | Good answer |
+|---|---|---|
+| 10 | slot only: tray clear, side opening 40 mm, 2 HIGH islands | slot, then the hanging wall cut away to the crowns: tray and tyres clear, 0 islands |
+| 11 | pilots added, plate still from `rover_refs.py`: fits 8c only | pilots added, plate from `import_current` pinned to 10c: fits 10c only |
+| 12 | all four edits: D20 hole, tabs 5.0 mm, face at 15.0 deg, arches R32; shell 2 HIGH | the same, then the hanging wall cut away: shell 0 islands |
+
+The four Scout parts rebuilt unchanged read no hole, 3.0 mm tabs, 10.0 deg, R28 and no islands,
+and the bad eval 12 answer with its STEPs deleted grades the same from its STLs alone. The text
+check for the problem named in the run's own words found it in every good transcript and in no
+bad one.
+
 ## Grading notes
 
 - Batch 2's process counts were checked by hand against every transcript, and `grade.py` now
@@ -186,6 +228,13 @@ larger part, a deeper chain, or the failure met late in a long session.
   as it was run.
 - `run_batch.ps1` now creates `logs\` before launching anything. In a fresh eval folder every
   launch used to fail and the batch then waited on runs that never started.
+- For evals 10 to 12, `run_eval.ps1` takes a folder as an input (copied whole, attached as one
+  item), and `grade.py` counts an input the run changed as one of its outputs (a part can be
+  rebuilt in place), keeps READMEs out of the data inputs that must stay unchanged, and lists
+  FROZEN scripts edited in place (`frozen_edited`). Re-graded with it, batch 1 is unchanged field
+  for field, and batch 2 changes in two file lists only: the two no-skill runs that edited their
+  input script in place now list it. `make_assets.py` builds the eval 11 plate chain by running
+  the chain's own step scripts in order (`MAKE_ASSETS=11` rebuilds only that).
 
 ## Isolation
 

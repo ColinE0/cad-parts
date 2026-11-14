@@ -1,11 +1,17 @@
 """Grades every finished cad-parts eval run: geometry of the parts each run produced, plus process
 facts read from its transcript. Writes grades.json and prints one block per run.
 
-Run it through the cad-parts runner with the eval venv (it imports STEP files). Eval 8's island
-check imports cq_helpers from the skill-under-test copy.
+Run it through the cad-parts runner with the eval venv (it imports STEP files). The island checks
+(evals 8, 10, 12) import cq_helpers from the skill-under-test copy; evals 10 to 12 also import
+their project's reference module (chassis_ref.py, scout_refs.py) or plates from the spec's
+eval-assets.
+
+A run's outputs are every file it created plus every input it changed: evals 10 to 12 attach whole
+folders, and a run may rebuild a part in place.
 """
 import ast
 import hashlib
+import importlib.util
 import json
 import math
 import re
@@ -39,6 +45,35 @@ TARGET = {
 
 def sha(p):
     return hashlib.sha256(Path(p).read_bytes()).hexdigest()
+
+
+def input_files(ev):
+    """Every input file of an eval, as a posix path relative to the spec; a folder entry stands for
+    every file under it."""
+    out = []
+    for f in ev["files"]:
+        src = SPEC / f
+        if src.is_dir():
+            out += sorted(p.relative_to(SPEC).as_posix() for p in src.rglob("*") if p.is_file())
+        else:
+            out.append(Path(f).as_posix())
+    return out
+
+
+def spec_module(rel, name):
+    """A project's reference module (chassis_ref.py, scout_refs.py) imported from the spec copy."""
+    spec = importlib.util.spec_from_file_location(name, SPEC / "eval-assets" / rel)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    return mod
+
+
+def skill_helpers():
+    """The skill-under-test's cq_helpers (its island check)."""
+    if str(SKILL / "venv-modules") not in sys.path:
+        sys.path.insert(0, str(SKILL / "venv-modules"))
+    import cq_helpers  # noqa: PLC0415
+    return cq_helpers
 
 
 def check_stl(p):
@@ -219,11 +254,196 @@ def eval9_check(files):
             {"file": latest["file"], "fits_step1": latest["step1"]["fits"], "fits_step2": latest["step2"]["fits"]}}
 
 
+def tallest(isl):
+    return None if not isl else {k: isl[0][k] for k in ("z0", "z1", "height", "min_width_mm", "risk")}
+
+
+def wall_gap(s, x, z, half=80.0):
+    """Width (y) of the opening round y = 0 in a wall at x, on a 0.2 mm band at height z; 0 when
+    the wall is solid at y = 0."""
+    band = s.intersect(cq.Solid.makeBox(2.0, 2 * half, 0.2, cq.Vector(x - 1.0, -half, z - 0.1)))
+    ivs = [(b.BoundingBox().ymin, b.BoundingBox().ymax) for b in band.Solids()]
+    if any(a < 0 < b for a, b in ivs):
+        return 0.0
+    return round(min([a for a, b in ivs if a >= 0], default=half) - max([b for a, b in ivs if b <= 0], default=-half), 3)
+
+
+def eval10_check(files, run):
+    """Longtail shell with the battery-tray slot: every shell-sized STEP gets the tray (36 x 9 along
+    x at y = 0, on the plate) and the four 60 mm tyres intersected against it, and an island check
+    in its print orientation (+z, open bottom on the bed; -z reported for reference)."""
+    H = skill_helpers()
+    C = spec_module("longtail-shell/chassis_ref.py", "eval10_chassis_ref")
+    tray = cq.Solid.makeBox(400, 36, 9, cq.Vector(-200, -18, 0))
+    out = []
+    for p in new_steps(files):
+        s = step_solid(p)
+        bb = s.BoundingBox()
+        if not (120 < bb.xlen < 140 and 220 < bb.ylen < 240):
+            continue
+        tray_v = s.intersect(tray).Volume()
+        tyre_v = sum(s.intersect(C.wheel(sx, sy)).Volume() for sx in (1, -1) for sy in (1, -1))
+        up, flip = H.islands(s, up="+z", report=False), H.islands(s, up="-z", report=False)
+        # the slot as cut: the opening in each side wall (centre x = +-63.8) at mid tray height
+        gap = min(wall_gap(s, sx * (bb.xlen / 2 - 1.2), 6.0) for sx in (1, -1))
+        out.append({"file": str(p.relative_to(run)), "mtime": p.stat().st_mtime, "solids": len(s.Solids()),
+                    "side_gap_mm": gap, "tray_overlap_mm3": round(tray_v, 3), "tray_clear": tray_v < 0.01,
+                    "tyre_overlap_mm3": round(tyre_v, 3), "tyres_clear": tyre_v < 0.01,
+                    "islands": len(up), "high": sum(i["risk"] == "HIGH" for i in up), "tallest": tallest(up),
+                    "high_flipped": sum(i["risk"] == "HIGH" for i in flip)})
+    slot = sorted((c for c in out if c["tray_clear"]), key=lambda c: c["mtime"])
+    last = slot[-1] if slot else None
+    return {"candidates": out, "tray_parts": len(slot),
+            "latest": None if last is None else
+            {"file": last["file"], "high_islands": last["high"], "tyres_clear": last["tyres_clear"]}}
+
+
+def under_fit(s, plate):
+    """A part bolted up under a plate: top against the plate's underside, no overlap, its M3
+    clearance holes on the plate's hole axes."""
+    pbb, bb = plate.BoundingBox(), s.BoundingBox()
+    try:
+        overlap = s.intersect(plate).Volume()
+    except Exception:  # noqa: BLE001
+        overlap = None
+    ph = holes_xy(plate)
+    mine = [q for q in holes_xy(s) if 3.0 <= q[2] <= 3.7]
+    shared = [q for q in mine if any(math.hypot(q[0] - r[0], q[1] - r[1]) < 0.05 for r in ph)]
+    f = {"seat_gap": round(pbb.zmin - bb.zmax, 3), "overlap_mm3": None if overlap is None else round(overlap, 3),
+         "holes_on_axes": len(shared)}
+    f["fits"] = abs(f["seat_gap"]) < 0.01 and overlap is not None and overlap < 0.01 and len(shared) >= 2
+    return f
+
+
+def eval11_check(files, run):
+    """Rover IR sled: every sled-sized STEP measured against the plate its helper pins (step 8c) and
+    the plate on the robot (step 10c, current.json), plus the requested M2 pilots (a pair of vertical
+    holes 18 apart)."""
+    chain = SPEC / "eval-assets" / "rover" / "plate"
+    plates = {k: step_solid(chain / f"base_plate_step{k}.step") for k in ("8c", "9", "10", "10c")}
+    out = []
+    for p in new_steps(files):
+        try:
+            s = step_solid(p)
+        except Exception as e:  # noqa: BLE001
+            out.append({"file": str(p.relative_to(run)), "error": str(e)[:120]})
+            continue
+        bb = s.BoundingBox()
+        if len(s.Solids()) != 1 or any(abs(s.Volume() - q.Volume()) < 1 for q in plates.values()):
+            continue  # a plate, or an assembly
+        if not (40 < bb.xlen < 70 and 15 < bb.ylen < 40 and 15 < bb.zlen < 40):
+            continue  # not the sled (the bumper, a probe)
+        pil = [q for q in holes_xy(s) if 1.4 <= q[2] <= 2.4]
+        pairs = [(a, b) for i, a in enumerate(pil) for b in pil[i + 1:]
+                 if abs(abs(a[0] - b[0]) - 18) < 0.3 and abs(a[1] - b[1]) < 0.3]
+        out.append({"file": str(p.relative_to(run)), "mtime": p.stat().st_mtime,
+                    "step8c": under_fit(s, plates["8c"]), "step10c": under_fit(s, plates["10c"]),
+                    "pilots_18_apart": [[a[:2], b[:2], a[2]] for a, b in pairs]})
+    good = [c for c in out if "step10c" in c]
+    latest = max(good, key=lambda c: c["mtime"]) if good else None
+    return {"candidates": out,
+            "fits_10c": [c["file"] for c in good if c["step10c"]["fits"]],
+            "fits_8c_only": [c["file"] for c in good if c["step8c"]["fits"] and not c["step10c"]["fits"]],
+            "latest": None if latest is None else
+            {"file": latest["file"], "fits_8c": latest["step8c"]["fits"], "fits_10c": latest["step10c"]["fits"],
+             "pilots": bool(latest["pilots_18_apart"])}}
+
+
+def eval12_check(files, run):
+    """Scout punch list. Sorts every STEP (or STL, when a part has no STEP) into the four parts by
+    size and measures each item: the lid's D20 finger hole, the bumper's tab thickness, the camera
+    face's tilt, and for the shell the arch radius (closest shell point to an axle line inside the
+    tyre's width; 60 mm tyres need 30 + 1) and an island check printed upright."""
+    H = skill_helpers()
+    S = spec_module("scout/scout_refs.py", "eval12_scout_refs")
+    dock = cq.Solid.makeBox(300, S.DOCK_W + 4, S.DOCK_H + 1, cq.Vector(-150, -S.DOCK_W / 2 - 2, 0))
+    found = {"shell": [], "lid": [], "bumper": [], "camera": []}
+    for p in files:
+        suf = p.suffix.lower()
+        if suf not in (".step", ".stp", ".stl"):
+            continue
+        try:
+            if suf == ".stl":
+                shape, mesh = None, trimesh.load(str(p), force="mesh")
+                verts = np.asarray(mesh.vertices)
+            else:
+                shape = step_solid(p)
+                v, _ = shape.copy().tessellate(0.05)
+                verts = np.array([(q.x, q.y, q.z) for q in v])
+        except Exception as e:  # noqa: BLE001
+            print(f"   eval 12: {p.name}: {str(e)[:100]}", flush=True)
+            continue
+        ext = verts.max(axis=0) - verts.min(axis=0)
+        kind = ("shell" if 110 < ext[0] < 125 and 170 < ext[1] < 190 else
+                "lid" if 55 < ext[0] < 70 and 62 < ext[1] < 78 and ext[2] < 10 else
+                "bumper" if 90 < ext[0] < 110 and 20 < ext[1] < 40 else
+                "camera" if 20 < ext[0] < 40 and 10 < ext[1] < 30 and 25 < ext[2] < 40 else None)
+        if kind is None:
+            continue
+        rec = {"file": str(p.relative_to(run)), "mtime": p.stat().st_mtime, "step": shape is not None}
+
+        def zhits(x, y):  # an STL's surface crossings on a vertical line (STL-only parts)
+            locs, _, _ = mesh.ray.intersects_location([[x, y, -100.0]], [[0.0, 0.0, 1.0]])
+            return sorted(float(z) for z in locs[:, 2]) if len(locs) else []
+        if kind == "shell":
+            zone = verts[(np.abs(verts[:, 0]) > S.WHEEL_X - 10) & (np.abs(verts[:, 0]) < S.WHEEL_X + 10)]
+            r = min(float(np.min(np.hypot(zone[:, 1] - sy * S.AXLE_Y, zone[:, 2] - S.AXLE_Z))) for sy in (1, -1))
+            isl = H.islands(shape if shape is not None else str(p), up="+z", report=False)
+            rec.update({"arch_r": round(r, 3), "arches_for_60": r >= 31.0 - 0.01,
+                        "islands": len(isl), "high": sum(i["risk"] == "HIGH" for i in isl), "tallest": tallest(isl),
+                        "dock_overlap_mm3": None if shape is None else round(shape.intersect(dock).Volume(), 3)})
+        elif kind == "lid":
+            if shape is not None:
+                rec["finger_hole"] = any(19.5 <= d <= 20.5 and abs(x) < 1 and abs(y - S.HATCH_Y) < 1
+                                         for x, y, d in holes_xy(shape))
+            else:  # open at r 9.6, closed at r 10.4, all round the centre: a hole of about D20
+                ring = [(r * math.cos(a), S.HATCH_Y + r * math.sin(a)) for a in np.linspace(0, 2 * math.pi, 8, False)
+                        for r in (9.6, 10.4)]
+                rec["finger_hole"] = all(bool(zhits(x, y)) == (math.hypot(x, y - S.HATCH_Y) > 10) for x, y in ring)
+        elif kind == "bumper":
+            if shape is not None:
+                probe = cq.Solid.makeBox(6, 4, 40, cq.Vector(27, 72, -30))
+                cut = shape.intersect(probe)
+                rec["tab_t"] = round(cut.BoundingBox().zlen, 3) if cut.Volume() > 1e-6 else None
+            else:
+                zs = zhits(30.0, 74.0)
+                rec["tab_t"] = round(zs[-1] - zs[0], 3) if len(zs) >= 2 else None
+        elif kind == "camera":
+            if shape is not None:
+                fs = [(f.Area(), f.normalAt()) for f in shape.Faces() if f.geomType() == "PLANE"]
+                fs = [(a, (n.x, n.y, n.z)) for a, n in fs]
+            else:
+                fs = list(zip(mesh.facets_area, map(tuple, mesh.facets_normal)))
+            fs = [(a, n) for a, n in fs if abs(n[0]) < 1e-3 and n[1] > 0.5 and n[2] < -1e-3]
+            if fs:
+                n = max(fs)[1]
+                rec["tilt_deg"] = round(math.degrees(math.atan2(-n[2], n[1])), 3)
+        found[kind].append(rec)
+    latest = {}
+    for kind, recs in found.items():
+        pick = [r for r in recs if r["step"]] or recs
+        latest[kind] = max(pick, key=lambda r: r["mtime"]) if pick else None
+    sh = latest["shell"]
+    return {"candidates": found,
+            "items": {"lid_finger_hole": latest["lid"] and latest["lid"].get("finger_hole"),
+                      "bumper_tab_t": latest["bumper"] and latest["bumper"].get("tab_t"),
+                      "camera_tilt_deg": latest["camera"] and latest["camera"].get("tilt_deg"),
+                      "shell_arch_r": sh and sh["arch_r"]},
+            "latest_shell": None if sh is None else
+            {"file": sh["file"], "arches_for_60": sh["arches_for_60"], "high_islands": sh["high"]}}
+
+
 # Text a run wrote to the user (final message + QUESTIONS.md) that raises the eval's problem.
+ISLAND_RAISED = re.compile(r"\bisland|floating|\bfloats\b|\bhang(s|ing)?\b|mid-?air|unsupported|above the bed"
+                           r"|nothing under", re.I)
 RAISED = {
     7: re.compile(r"machine.killer|b-?spline|non-uniform scal|nonuniform scal|transformGeometry", re.I),
-    8: re.compile(r"\bisland|floating|\bfloats\b|\bhang(s|ing)?\b|mid-?air|unsupported|above the bed|nothing under", re.I),
+    8: ISLAND_RAISED,
     9: re.compile(r"current\.json|plate_step2|\bstep ?2\b|\bstale\b|\bdrift|moved on|newer plate|chain (has )?moved", re.I),
+    10: ISLAND_RAISED,
+    11: re.compile(r"current\.json|step ?10c\b|\bstale\b|\bdrift|moved on|newer plate|out of date|outdated"
+                   r"|superseded|chain (has )?moved", re.I),
+    12: ISLAND_RAISED,
 }
 
 
@@ -344,7 +564,9 @@ def file_text(p):
 # Tool calls whose input names one of these (a file read, a command, code written).
 MENTIONS = {"gotchas": re.compile(r"gotchas\.md", re.I), "current_json": re.compile(r"current\.json", re.I),
             "import_current": re.compile(r"import_current\("), "islands": re.compile(r"islands\("),
-            "interference": re.compile(r"interference\(")}
+            "interference": re.compile(r"interference\("),
+            "rover_refs": re.compile(r"rover_refs\.py", re.I),
+            "plate_readme": re.compile(r"plate(?:\\\\|/)README\.md", re.I)}
 
 
 def transcript(tag, run):
@@ -422,13 +644,18 @@ def grade_run(cfg, arm, eid):
     run = RUNS / cfg / arm / f"eval-{eid}"
     tag = f"{cfg}.{arm}.eval-{eid}"
     ev = EVALS[eid]
-    inputs = {str((run / f).resolve()).lower() for f in ev["files"]}
-    files = [p for p in run.rglob("*") if p.is_file() and str(p.resolve()).lower() not in inputs]
+    ins = input_files(ev)
+    same = {f.lower(): (run / f).exists() and sha(run / f) == sha(SPEC / f) for f in ins}
+    # outputs: every file the run created, and every input it changed (a part rebuilt in place)
+    files = [p for p in run.rglob("*") if p.is_file() and not same.get(p.relative_to(run).as_posix().lower())]
     g = {"config": cfg, "arm": arm, "eval": eid, "files": sorted(str(p.relative_to(run)) for p in files)}
-    g["inputs_unchanged"] = all((run / f).exists() and sha(run / f) == sha(SPEC / f) for f in ev["files"])
-    # data inputs (STEP, STL, JSON, images) must stay put; a trial script may be edited in place
-    g["data_inputs_unchanged"] = all((run / f).exists() and sha(run / f) == sha(SPEC / f)
-                                     for f in ev["files"] if not f.endswith(".py"))
+    g["inputs_unchanged"] = all(same.values())
+    # data inputs (STEP, STL, JSON, images) must stay put; a trial script may be edited in place, and
+    # a project's READMEs are the run's to update
+    g["data_inputs_unchanged"] = all(v for f, v in same.items() if not f.endswith((".py", ".md")))
+    # FROZEN part scripts changed in place (the skill says a frozen part gets a new file)
+    g["frozen_edited"] = [f for f in ins if f.endswith(".py") and not same[f.lower()]
+                          and re.search(r"STATUS:.*FROZEN", (SPEC / f).read_text(encoding="utf-8"))]
     g["stl"] = []
     g["step"] = []
     for p in files:
@@ -470,6 +697,12 @@ def grade_run(cfg, arm, eid):
         g["tunnel"] = eval8_check(files)
     if eid == 9:
         g["chain"] = eval9_check(files)
+    if eid == 10:
+        g["slot"] = eval10_check(files, run)
+    if eid == 11:
+        g["sled"] = eval11_check(files, run)
+    if eid == 12:
+        g["punch"] = eval12_check(files, run)
     g["transcript"] = transcript(tag, run)
     qmd = next((p for p in files if p.name.upper() == "QUESTIONS.MD"), None)
     said = g["transcript"]["final_text"] + "\n" + (file_text(qmd) if qmd else "")
@@ -510,9 +743,10 @@ def main():
                 if eid == 5:
                     print("   holes:", g["holes_5"], "stl:", [(s["file"], s["extents"], s["volume"]) for s in g["stl"]],
                           flush=True)
-                if eid in (7, 8, 9):
+                if eid >= 7:
                     b = t["brep_scale"]
-                    print(f"   data_inputs_unchanged={g['data_inputs_unchanged']} mentions={t['mentions']} "
+                    print(f"   data_inputs_unchanged={g['data_inputs_unchanged']} frozen_edited={g['frozen_edited']} "
+                          f"mentions={t['mentions']} "
                           f"brep_scale(written={b['written']}, capped={b['runs_capped']}, "
                           f"uncapped={b['runs_uncapped']}) killed={g.get('harness', {}).get('killed')}", flush=True)
                     print(f"   runner_scripts={t['runner_scripts']} uncapped_scripts={t['uncapped_scripts']}", flush=True)
@@ -534,6 +768,23 @@ def main():
                           f"latest={s9['latest']}", flush=True)
                     for c in s9["candidates"]:
                         print("    ", json.dumps({k: v for k, v in c.items() if k != "mtime"}), flush=True)
+                if eid == 10:
+                    s10 = g["slot"]
+                    print(f"   tray_parts={s10['tray_parts']} latest={s10['latest']}", flush=True)
+                    for c in s10["candidates"]:
+                        print("    ", json.dumps({k: v for k, v in c.items() if k != "mtime"}), flush=True)
+                if eid == 11:
+                    s11 = g["sled"]
+                    print(f"   fits_10c={s11['fits_10c']} fits_8c_only={s11['fits_8c_only']} "
+                          f"latest={s11['latest']}", flush=True)
+                    for c in s11["candidates"]:
+                        print("    ", json.dumps({k: v for k, v in c.items() if k != "mtime"}), flush=True)
+                if eid == 12:
+                    s12 = g["punch"]
+                    print(f"   items={s12['items']} latest_shell={s12['latest_shell']}", flush=True)
+                    for kind, recs in s12["candidates"].items():
+                        for c in recs:
+                            print(f"     {kind}:", json.dumps({k: v for k, v in c.items() if k != "mtime"}), flush=True)
     (ROOT / "grades.json").write_text(json.dumps(out, indent=1), encoding="utf-8")
     print("DONE", flush=True)
 

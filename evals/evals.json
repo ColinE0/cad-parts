@@ -54,6 +54,24 @@
       "prompt": "can you re-run my plate bracket script? I need a fresh stl and step of it, it's going on the plate tonight.",
       "expected_output": "Notices that the bracket imports plate_step1.step by filename while the chain's current.json names plate_step2 as the plate to print, instead of re-running it and reporting fit checks that passed against a stale parent. Moves the import to h.import_current(folder, pin=...), sees the chain-drift failure, re-runs every fit check against plate_step2 (seated on its top at z 3, no overlap, both holes on its axes at x = +-28) and then moves the pin; or stops and asks in QUESTIONS.md. current.json and both plate STEPs untouched.",
       "files": ["eval-assets/plate_bracket.py", "eval-assets/plate-chain-moved/plate_step1.step", "eval-assets/plate-chain-moved/plate_step2.step", "eval-assets/plate-chain-moved/current.json"]
+    },
+    {
+      "id": 10,
+      "prompt": "the new battery tray loads from the side, so the shell needs a slot across the bottom for it: 40mm wide and 12mm tall, centred on y=0, right through both sides. the tray is 36 wide and 9 tall and slides in along x on top of the plate. need the stl and step.",
+      "expected_output": "v7 is FROZEN, so the slot goes in a new file. Cuts the slot, proves the tray (36 x 9 along x at y = 0, on the plate) clears it with h.interference, keeps every chassis fit check passing, then runs h.islands in the print orientation (+z, open bottom on the bed). The arches already narrow the side wall between the front and rear tyres to about 36 mm at the bed, and the 40 mm slot takes that whole foot away, so on both sides the wall between the arches hangs from the arch crowns: two HIGH islands, about 19 tall from bed+4.8 to bed+24, a fraction of a mm thin where they start. Neither the prompt nor the script names that wall. The run fixes it before handing over (cuts the hanging wall away up to the crowns, or grounds it some other way that keeps the tray and the tyres clear) and re-runs islands clean, or puts it to the user in QUESTIONS.md; never 'supports will handle it'. Exports through h.export_checked, every run through the runner.",
+      "files": ["eval-assets/longtail-shell/"]
+    },
+    {
+      "id": 11,
+      "prompt": "can you add two M2 pilot holes to the sled's front lip for the new IR board? 18mm apart, centred, 6mm deep, up into the underside where the board sits. need a fresh stl to print tonight.",
+      "expected_output": "Adds the two pilots (D1.7, 18 apart, 6 deep, up into the lip's underside) in a new version of the sled, and notices before building that the sled reaches its parent through rover_refs.py, which loads base_plate_step8c.step by filename, while plate/current.json and plate/README.md name step 10c as the plate on the robot (printed 2026-11-09: 1 mm thicker underneath, sled holes 6 mm further forward). Moves the parent to h.import_current(rover/plate, pin=...), sees the chain-drift failure, rebuilds and re-checks the sled against step 10c (seated against its underside at z -4, no overlap, both bolt holes on its sled holes at y 68), or stops and asks in QUESTIONS.md. A sled built against 8c passes every check in its own script and overlaps the 10c plate by about 1170 mm3 with its bolt holes 6 mm off. Plate STEPs and current.json untouched.",
+      "files": ["eval-assets/rover/"]
+    },
+    {
+      "id": 12,
+      "prompt": "a few changes before I print tonight:\n1. the hatch lid needs a finger hole so I can get it off, 20mm, centred\n2. the front bumper cracked at the mount tabs, make the tabs 2mm thicker\n3. the camera needs more down-tilt, 15 degrees instead of 10\n4. the new wheels are 60mm (were 52), open the shell's wheel arches to suit, same clearance as now\nfresh stls of everything you change please",
+      "expected_output": "All four parts are FROZEN, so each change goes in a new file, and every part gets export_checked and an island check in its print orientation. Items 1 to 3 are routine: a D20 hole through the lid, the bumper's tabs 3 -> 5 mm (downward, away from the plate), the camera face at 15 deg. Item 4 is the trap: opening the arches for 60 mm tyres (R 28 -> 32, the same 2 mm clearance) removes the last foot of the side wall between the arches, which the shell's existing dock slot had already narrowed to about 2 mm each side, so on both sides that wall hangs from the arch crowns: two HIGH islands, about 18 tall from bed+5.6 to bed+24. Every fit check in the shell script still passes. The run fixes it before handing over and re-runs islands clean, or puts it to the user in QUESTIONS.md.",
+      "files": ["eval-assets/scout/"]
     }
   ]
 }

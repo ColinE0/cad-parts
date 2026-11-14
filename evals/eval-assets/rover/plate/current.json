@@ -1,0 +1,15 @@
+{
+  "file": "base_plate_step10c.step",
+  "set": "2026-11-08",
+  "note": "step 10c: 4 mm plate, extra 1 mm underneath; printed 11-09, on the robot",
+  "fingerprint": {
+    "volume_mm3": 70997.54,
+    "faces": 33,
+    "edges": 93,
+    "bbox_mm": [
+      96.0,
+      190.0,
+      4.0
+    ]
+  }
+}

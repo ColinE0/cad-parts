@@ -96,7 +96,9 @@ bare model reasons about, keeps CAD processes behind the memory cap (one slip in
 a bare `python -c` that imported the helpers to read their signatures), gets the memory kill
 right instead of "raise the limit", and pins a dependent part to its parent so the next change
 fails loudly instead of passing quietly. It costs two to four times the tokens. The original
-failures happened deep in long sessions on large parts; evals that bury them that deep are next.
+failures happened deep in long sessions on large parts. Three evals that bury them that deep (a
+large shell, a project with a deep plate chain, a four-item punch list) are built and their
+grading checked against hand-made answers; they have not been run yet.
 A ninth prompt, a non-uniform scale of an imported STEP, is built but was not run: replayed under
 the runner, the op once blamed for a machine crash finished in 0.24 s with no extra memory.
 
@@ -179,7 +181,7 @@ covers all of it with plain asserts.
 | `cad-parts/scripts/test_cq_helpers.py` | self-test for the helpers (11 groups, ends with `DONE`) |
 | `cad-parts/venv-modules/cq_helpers.py` | export gate, renders, islands, interference, chain pointer |
 | `setup/` | `install.ps1` and the pinned `requirements.txt` |
-| `evals/` | the 9 eval prompts (eval 7 built, not run), their input files, the harness and the grader; `harness/make_assets.py` rebuilds the binary inputs |
+| `evals/` | the 12 eval prompts (7 and 10 to 12 built, not run), their input files and project folders, the harness and the grader; `harness/make_assets.py` rebuilds the binary inputs |
 | `docs/` | the picture above and `make_readme_image.py`, which draws it from eval 8's part with the helpers |
 | `.github/workflows/selftest.yml` | CI: runs `install.ps1` on a clean Windows runner |
 
@@ -216,7 +218,8 @@ touched outside its own folder.
   island risk thresholds).
 - **Eight evals run, one run per configuration.** Model output varies run to run, so each cell in
   the results is one sample, not a rate. The two harder evals rebuild their failures on small
-  parts in short prompts, where the bare model catches them too.
+  parts in short prompts, where the bare model catches them too; evals 10 to 12 bury them deeper
+  and have not been run.
 - **The baseline has no helper library.** "No skill" also means no `cq_helpers`, so the
   comparison is skill plus helpers against the bare model in the same venv.
 - **Headless runs cannot ask questions.** Both arms were told to write questions and assumed
