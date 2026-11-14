@@ -1,7 +1,7 @@
 # Modeling from a reference image: decompose before you build
 
-Adapted from the vision-decompose skill of the author's earlier, retired Onshape
-plugin; the process survives the tool. When the user gives a reference image (drawing with callouts,
+Adapted from the vision-decompose skill in jarvis-onshape-mcp by Reshef Elisha
+(MIT License; see NOTICE). The process outlives that Onshape tool. When the user gives a reference image (drawing with callouts,
 iso render, photo, hand sketch) and asks to model it, the first deliverable is
 NOT a CadQuery script. It is a structured feature decomposition they can
 sanity-check.

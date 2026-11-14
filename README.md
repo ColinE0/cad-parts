@@ -216,3 +216,9 @@ Wilder.
 Built with [Claude Code](https://claude.com/claude-code). The skill, its helpers and the eval
 harness were written in collaboration with Claude (Anthropic), and every rule in them comes from
 a real part that failed on a real printer.
+
+The reference-image decomposition procedure is adapted from the vision-decompose skill in
+Reshef Elisha's [jarvis-onshape-mcp](https://github.com/ReshefElisha/jarvis-onshape-mcp) (MIT),
+whose truth-telling feedback design also inspired the geometry checks in `cq_helpers`; see
+[NOTICE](NOTICE). The CAD itself runs on [CadQuery](https://github.com/CadQuery/cadquery) and
+Open CASCADE.
