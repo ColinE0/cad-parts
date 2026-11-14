@@ -1,0 +1,15 @@
+{
+  "file": "plate_step1.step",
+  "set": "2026-09-26",
+  "note": "eval asset: the parent plate a dependent bracket pins to",
+  "fingerprint": {
+    "volume_mm3": 9471.32,
+    "faces": 10,
+    "edges": 24,
+    "bbox_mm": [
+      60.0,
+      40.0,
+      4.0
+    ]
+  }
+}

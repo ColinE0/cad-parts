@@ -1,0 +1,41 @@
+{
+  "skill_name": "cad-parts",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "make me a spacer for an M4 bolt, 12mm tall, 9mm outer diameter, with a 4.3mm hole through it. I need the stl and step files.",
+      "expected_output": "A watchdogged subprocess run producing spacer .stl + .step via cq_helpers.export_checked (watertight-verified), a render6 PNG, script saved next to the outputs with params at top and a STATUS line, bbox asserted 9x9x12, DONE sentinel required before reporting.",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "here's my working standoff script. can you make a version thats 14mm tall instead? don't break anything else about it.",
+      "expected_output": "Original file untouched (its STATUS line says FROZEN); a NEW file (e.g. standoff_14mm.py) changing only the height constant, docstring stating the delta, built via the watchdog runner, export_checked + render, bbox printed at 14.00.",
+      "files": ["eval-assets/standoff_11mm.py"]
+    },
+    {
+      "id": 3,
+      "prompt": "this stl the slicer keeps calling non-manifold. can you figure out whats wrong and give me one that slices clean?",
+      "expected_output": "Diagnosis via trimesh (open edges / winding), repair through the export gate or a geometry rebuild (h.snap_float32 / h.mesh_to_solid for a mesh-only part), output STL verified watertight before handing over, no hand-waving.",
+      "files": ["eval-assets/cracked_part.stl"]
+    },
+    {
+      "id": 4,
+      "prompt": "make a bracket that bolts to this plate through two of its holes and stands 15mm proud. the plate folder is eval-assets/plate-chain.",
+      "expected_output": "The parent is imported with h.import_current(folder, pin='plate_step1'), never by a hard-coded filename; the bracket's bolt holes are placed from the imported geometry and checked with h.interference against the plate; the script's docstring names the pinned parent; export_checked + render6.",
+      "files": ["eval-assets/plate-chain/plate_step1.step", "eval-assets/plate-chain/current.json"]
+    },
+    {
+      "id": 5,
+      "prompt": "model this bracket for me",
+      "expected_output": "No script first: a decomposition.md written per references/reference-image-decomposition.md (envelope 40 x 25 x 30 mm, L profile 4 thick, 2X diameter 4.4 through holes at 20 mm spacing, units confirmed from the title block, the diameter symbol not misread as 9), the user asked to confirm, then the build with h.render_compare against the drawing actually read before declaring done.",
+      "files": ["eval-assets/bracket_drawing.png"]
+    },
+    {
+      "id": 6,
+      "prompt": "my build keeps dying, the runner says exit 137. here's the script.",
+      "expected_output": "Reads the last committed total and the runner's cap-kill line, identifies a watchdog cap kill (not a timeout), and diagnoses the allocation as a geometry or accumulation mistake per gotchas rather than raising -MaxRamGB as the first response; does not run the script outside the runner.",
+      "files": ["eval-assets/runaway.py"]
+    }
+  ]
+}
