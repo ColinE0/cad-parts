@@ -11,6 +11,8 @@ STEP that you can trust. Every build runs in a memory-capped subprocess. Every S
 watertight before it leaves. Every part is rendered and actually looked at. A part that already
 printed and fit is never edited in place.
 
+![Eval 8's sled bridge: a tunnel cut that clears the sled leaves the centre post hanging 10 mm above the bed; islands() rates it HIGH, and the grounded fix reads clean](docs/island-check.png)
+
 ## Contents
 
 - [Why this exists](#why-this-exists)
@@ -178,6 +180,7 @@ covers all of it with plain asserts.
 | `cad-parts/venv-modules/cq_helpers.py` | export gate, renders, islands, interference, chain pointer |
 | `setup/` | `install.ps1` and the pinned `requirements.txt` |
 | `evals/` | the 9 eval prompts (eval 7 built, not run), their input files, the harness and the grader; `harness/make_assets.py` rebuilds the binary inputs |
+| `docs/` | the picture above and `make_readme_image.py`, which draws it from eval 8's part with the helpers |
 | `.github/workflows/selftest.yml` | CI: runs `install.ps1` on a clean Windows runner |
 
 ## Reproduce the evals
