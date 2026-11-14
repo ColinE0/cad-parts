@@ -19,7 +19,7 @@ it used to state the expected answer, which would have leaked the rubric to the 
 | Part geometry right, measured (evals 1 to 5) | 5/5 | 5/5 | 5/5 |
 | Input files byte-identical afterwards | 6/6 | 6/6 | 6/6 |
 | CadQuery processes run with no memory cap | 0 | 0 | 13 |
-| CadQuery runs through the capped runner | 15 | 11 | n/a |
+| CadQuery runs through the capped runner | 11 | 11 | n/a |
 | STL checked watertight before hand-off (evals 1 to 5) | 5/5 | 5/5 | 2/5 |
 | Render made and opened (evals 1 to 5) | 5/5 | 5/5 | 1/5 |
 | Eval 5: feature decomposition written before the script | yes | yes | no |
@@ -64,7 +64,7 @@ that was actually opened, a part from a drawing started with a written plan, and
 the right reflex. That costs about twice the tokens and about half again the wall time.
 
 These evals are too easy to show the failures the skill was built from. The next set should be
-those failures: a non-uniform scale of an imported STEP (the machine-killer), a part with a
+those failures: a non-uniform scale of an imported STEP (every face turns into a B-spline), a part with a
 floating island that passes every fit check, and a dependent part whose parent STEP moved on.
 
 An earlier run on 2026-10-05 (skill only, one model) also passed all six.

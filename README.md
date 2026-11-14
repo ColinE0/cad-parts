@@ -34,7 +34,7 @@ those failures on real parts:
 
 | What goes wrong | What the skill does about it |
 |---|---|
-| A CAD kernel op allocates without bound. A non-uniform scale of an imported STEP turned every analytic face into a B-spline and took the whole machine down. | Every script runs in a Windows job object with a kernel-enforced memory cap and a timeout over the whole process tree. A runaway loses one run, not the machine. |
+| A CAD job inside a long-running process ran away with memory and took the whole machine down. | Every script runs in a Windows job object with a kernel-enforced memory cap and a timeout over the whole process tree. A runaway loses one run, not the machine. |
 | A B-rep that passes `isValid()` still exports an STL the slicer calls non-manifold. | `export_checked` gates every export: valid solid, watertight and consistently wound STL, gentle auto-repair only when the volume moves less than 0.5 %. |
 | Dimensions get "verified" by asserting an input constant against itself. | Features are checked by measuring the built solid, and a 6-view render is read before anything is reported. |
 | The model edits the script for a part that already printed and fit, and the working version is gone. | Every script carries a `STATUS:` line. FROZEN parts are never edited; variants get a new file that names its delta. |
