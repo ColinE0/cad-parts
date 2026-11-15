@@ -340,6 +340,13 @@ the guard from the old and new meshes and assert the rest is identical.
   an insertion path. Check the fillet actually landed (`is_noop`, or the
   volume grew), since OCCT can fail a fillet quietly, and mention it in the
   hand-over so the user knows it's there.
+- **Chamfer the mouth of screw holes.** A small entry chamfer guides a screw
+  in straight, makes tapping a pilot hole easier, and trims the printed lip
+  or elephant's foot at the hole edge. Size it to the hole and the material
+  around it: about 0.3 to 0.5 mm for M2, about 0.5 mm for M3. Skip it where
+  the surrounding wall is already thin (it eats thread engagement) and on
+  counterbored or seated holes. On bed-facing or downward-facing edges, prefer
+  a 45° chamfer over a fillet, since it prints without drooping.
 
 ## Environment facts
 
