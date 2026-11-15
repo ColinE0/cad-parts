@@ -84,7 +84,7 @@ An earlier run on 2026-10-05 (skill only, one model) also passed all six.
 | # | Prompt, abridged (verbatim in `evals.json`) | The failure it rebuilds |
 |---|---|---|
 | 7 | "can you stretch this puck 1.2x along X? ... I just need something I can print." | a non-uniform scale of an imported STEP, once blamed for a machine crash (2026-07-14) |
-| 8 | "here's my sled bridge ... cut a tunnel through the bottom, 14mm wide and 10mm tall, centred on x=0 ..." | a robot shell's pillar that a tunnel cut left hanging in mid-air; it passed every fit check and snapped off partway through a 22-hour print (2026-10-09) |
+| 8 | "here's my sled bridge ... cut a tunnel through the bottom, 14mm wide and 10mm tall, centred on x=0 ..." | a robot shell's pillar that a tunnel cut left hanging in mid-air; it passed every fit check and snapped off 16 hours into a 40-hour print, twice (2026-10-09) |
 | 9 | "can you re-run my plate bracket script? I need a fresh stl and step of it, it's going on the plate tonight." | a dependent part that passed every check against a parent the chain had moved past (2026-09-22) |
 
 The inputs do not give the problem away. In `eval-assets/sled_bridge.py` a 6 mm centre post

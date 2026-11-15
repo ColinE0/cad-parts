@@ -68,7 +68,7 @@ parts for a robot, and every rule in it comes from something that actually broke
 | A B-rep that passes `isValid()` still exported an STL the slicer called non-manifold. | `export_checked` gates every export: valid solid, watertight and consistently wound STL, gentle auto-repair only when the volume moves less than 0.5 %, and an STL that matches the STEP read back from disk in size and volume. |
 | Dimensions got "verified" by asserting an input constant against itself. | Features are checked by measuring the built solid, and a 6-view render is read before anything is reported. |
 | The model edited the script for a part that already printed and fit, and the working version was gone. | Every script carries a `STATUS:` line. FROZEN parts are never edited; variants get a new file that names its delta. |
-| A part passed every fit check and still couldn't be printed: a pillar started in mid-air on supports and snapped off partway through a 22-hour print. | `islands()` slices the part in its print orientation and flags material that starts above the bed. |
+| A part passed every fit check and still couldn't be printed: a pillar started in mid-air on supports and snapped off 16 hours into a 40-hour print, twice. | `islands()` slices the part in its print orientation and flags material that starts above the bed. |
 | A drawing's `Ø` got read as a `9`, or a feature got skipped. | Parts from images start with a written feature decomposition the user confirms, and end with a side-by-side render against the drawing. |
 
 ## What it does
@@ -148,7 +148,7 @@ instead of passing quietly.
 
 Buried deep is where it really shows. In six runs per setup, the same model saw the same hanging
 wall *every* time. Without the skill, it called it a support setting and shipped it all six
-times, which is exactly the call that snapped my 22-hour print. With the skill, it refused all
+times, which is exactly the call that snapped my 40-hour print, twice. With the skill, it refused all
 six times and recommended a printable part. Both setups found the stale plate, since the bare
 model read all 17 files first. The skill costs two to four times the tokens.
 
