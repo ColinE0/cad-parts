@@ -28,6 +28,19 @@ BLOCK = [
     ("Bash", "uv run --python C:/cadquery-venv/Scripts/python.exe part.py"),
     # a runner call in one segment does not excuse a direct call in another
     ("PowerShell", rf'& C:\skill\scripts\run_watchdogged.ps1 -Script a.py; & {PY} b.py'),
+    # the runner's name in an argument or a comment is not the runner
+    ("PowerShell", rf"{PY} part.py  # run_watchdogged.ps1"),
+    ("PowerShell", rf'& "{PY}" part.py --note "use run_watchdogged.ps1"'),
+    ("PowerShell", rf"& C:\tools\fake_run_watchdogged.ps1 -Script a.py; & {PY} a.py"),
+    ("PowerShell", r"& C:\tools\fake_run_watchdogged.ps1 -Python C:\cadquery-venv\Scripts\python.exe"
+                   "\n& C:\\cadquery-venv\\Scripts\\python.exe a.py"),
+    # a new shell handed the command as a string
+    ("PowerShell", rf'powershell -NoProfile -Command "& {PY} part.py"'),
+    ("PowerShell", rf"""pwsh -c "& {PY} -c 'import cadquery'" """),
+    ("Bash", 'bash -c "/c/cadquery-venv/Scripts/python.exe part.py"'),
+    ("Bash", "sh -lc 'C:/cadquery-venv/Scripts/python.exe part.py'"),
+    # "pip" in a file name is not package management
+    ("PowerShell", rf"Start-Process -FilePath {PY} -ArgumentList pipeline.py -Wait"),
 ]
 ALLOW = [
     ("PowerShell", r'& "$env:USERPROFILE\.claude\skills\cad-parts\scripts\run_watchdogged.ps1" -Script C:\parts\part.py -Tail 40'),
@@ -42,6 +55,11 @@ ALLOW = [
     ("Bash", 'git commit -m "docs: the venv lives at C:/cadquery-venv/Scripts/python.exe"'),
     ("Bash", "uv pip install --python C:/cadquery-venv/Scripts/python.exe -r requirements.txt"),
     ("Read", rf"{PY} part.py"),     # not a shell tool: never inspected
+    ("PowerShell", r'powershell -ExecutionPolicy Bypass -File "C:\skill\scripts\run_watchdogged.ps1" -Script part.py'),
+    ("PowerShell", r'& "C:\Program Files\cad parts\scripts\run_watchdogged.ps1" -Script part.py'),
+    ("PowerShell", rf'Start-Process -FilePath {PY} -ArgumentList "-m pip install shapely" -Wait'),
+    ("PowerShell", r'powershell -NoProfile -Command "Get-ChildItem C:\cadquery-venv\Scripts"'),
+    ("Bash", 'bash -c "ls /c/cadquery-venv/Scripts"'),
 ]
 
 

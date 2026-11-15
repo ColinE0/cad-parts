@@ -9,6 +9,8 @@ back to Claude) when a segment starts the venv's interpreter directly:
     C:\\cadquery-venv\\Scripts\\python.exe part.py          blocked
     & $py -c "import cadquery"   ($py set to that path)   blocked
     & ...\\run_watchdogged.ps1 -Script part.py              allowed: the runner
+    ...\\python.exe part.py  # run_watchdogged.ps1          blocked: the name is not the program
+    powershell -Command "& ...\\python.exe part.py"         blocked: nested shells are read too
     C:\\cadquery-venv\\Scripts\\python.exe -m pip install x  allowed: package management
     Copy-Item cq_helpers.py C:\\cadquery-venv\\Lib\\...      allowed: the path is only an argument
 
@@ -29,6 +31,15 @@ ALLOWED_ARGS = re.compile(r"""^(?:-m\s+(?:pip|ensurepip)\b|--version\b|-V{1,2}\b
 # words that run the next word as a program: PowerShell's call operators, cmd, bash wrappers
 LAUNCHERS = re.compile(r"""^(?:&|\.|call\b|cmd(?:\.exe)?\s+/[cks]\b|exec\b|nohup\b|time\b|command\b)\s*""", re.I)
 ENV_PREFIX = re.compile(r"""^(?:[A-Za-z_]\w*=(?:"[^"]*"|'[^']*'|\S*)\s+)+""")
+# the first word of a segment: a quoted path or a bare one
+HEAD_TOKEN = re.compile(r"""^(?:"([^"]*)"|'([^']*)'|(\S+))""")
+# powershell/pwsh -File <script>: the runner launched through a fresh PowerShell
+PS_FILE = re.compile(r"""^(?:powershell|pwsh)(?:\.exe)?\s+(?:-(?!file\b)\S+\s+(?:(?!-)\S+\s+)?)*-file\s+""", re.I)
+# a shell handed a command string: powershell -Command "...", bash -c "...", sh -c '...'
+NESTED = re.compile(r"""^(?:powershell|pwsh|bash|sh|zsh)(?:\.exe)?\s+"""
+                    r"""(?:-(?!command\b|[a-z]*c\b)\S+\s+(?:(?!-)\S+\s+)?)*-(?:command|[a-z]*c)\s+(.*)$""",
+                    re.I | re.S)
+PIP_ARGS = re.compile(r"""-ArgumentList\s+["']?-m\s+(?:pip|ensurepip)\b""", re.I)
 
 
 def venv_roots():
@@ -63,7 +74,20 @@ def strip_launchers(seg):
         s = s[m.end():]
 
 
-def violations(command):
+def launches_runner(s):
+    """True only when the program this segment starts is run_watchdogged.ps1 itself (called
+    directly, or as powershell -File), not when the name merely appears in an argument or comment."""
+    m = PS_FILE.match(s)
+    if m:
+        s = s[m.end():]
+    t = HEAD_TOKEN.match(s)
+    if not t:
+        return False
+    word = next(g for g in t.groups() if g is not None)
+    return re.split(r"[\\/]", word)[-1].lower() == "run_watchdogged.ps1"
+
+
+def violations(command, depth=0):
     interp = "(?:" + "|".join(path_pattern(r) for r in venv_roots()) + "|" + ENV_REF + ")"
     head_re = re.compile(r"""^["']?""" + interp + r"""["']?(?=\s|$)""", re.I)
     # variables pointed at the interpreter: $py = "C:\...\python.exe" (PowerShell), PY=... (bash)
@@ -78,10 +102,16 @@ def violations(command):
         alias_re = re.compile(r"""^["']?\$\{?(?:""" + names + r""")\}?["']?(?=\s|$)""", re.I)
     found = []
     for seg in segments(command):
-        if "run_watchdogged" in seg.lower():
-            continue                      # the runner, whatever Python it is handed
         s = strip_launchers(seg)
-        if re.match(r"(?i)start-process\b", s) and re.search(interp, s, re.I) and "pip" not in s.lower():
+        if launches_runner(s):
+            continue                      # the runner, whatever Python it is handed
+        nested = NESTED.match(s)
+        if nested and depth < 3:          # look inside the command string a new shell is given
+            inner = nested.group(1).strip().strip("\"'")
+            if violations(inner, depth + 1):
+                found.append(seg)
+            continue
+        if re.match(r"(?i)start-process\b", s) and re.search(interp, s, re.I) and not PIP_ARGS.search(s):
             found.append(seg)
             continue
         if re.match(r"(?i)uv\s+run\b", s) and re.search(interp, s, re.I):

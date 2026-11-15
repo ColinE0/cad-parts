@@ -7,15 +7,20 @@
 
 A Claude Code skill for designing 3D-printable parts with CadQuery. You ask for a part in plain
 words ("an M4 spacer, 12 mm tall, 9 mm OD") or hand over a drawing, and you get back an STL and a
-STEP that you can trust. Every build runs in a memory-capped subprocess. Every STL is checked
-watertight before it leaves. Every part is rendered and actually looked at. A part that already
-printed and fit is never edited in place.
+STEP that were measured and checked before you see them. Builds go through a memory-capped runner
+(a hook can make that a rule). Every STL has to pass a watertight check and agree with its STEP.
+Every part is rendered and the render is read. A part that already printed and fit is never
+edited in place. None of that proves a part will fit or print well: the
+[physical record](#physical-record) shows how often it still doesn't, and why.
 
 > **Windows 10/11 only for now.** The memory cap is a Windows job object driven from PowerShell.
 > macOS and Linux would need the same idea built on cgroups or `setrlimit`, which is not written
 > yet (see [Limitations](#limitations)). The rest of the skill is plain CadQuery and Python.
 
-![Eval 8's sled bridge: a tunnel cut that clears the sled leaves the centre post hanging 10 mm above the bed; islands() rates it HIGH, and the grounded fix reads clean](docs/island-check.png)
+![Three printed, fitted parts: the wheel adapter cut open to show its two corner ears, a hub cheek with ball sockets for the real rollers, and the final ten-spoke cheek](docs/wheel-chain.png)
+
+Three parts from a small robot's mecanum wheels, all printed and fitted. Getting there took 17
+recorded print outcomes; [the story](#example-the-wheels) is below.
 
 ## Contents
 
@@ -94,6 +99,8 @@ past.
 | STL checked watertight / render made and opened | 2/2, 2/2 | 2/2, 2/2 | 1/2, 0/2 |
 | Tokens / cost at API list prices, both | 1.19 M / $3.17 | 1.09 M / $3.60 | 0.33 M / $1.24 |
 
+![Eval 8's sled bridge: a tunnel cut that clears the sled leaves the centre post hanging 10 mm above the bed; islands() rates it HIGH, and the grounded fix reads clean](docs/island-check.png)
+
 **Three buried ones.** The original failures happened deep in real projects, so these bury the
 same two the way they happened: a slot asked for in a 230 mm robot shell with a dozen features,
 which quietly takes the whole foot of the wall between the wheel arches; a small edit to a part
@@ -152,13 +159,11 @@ overlap, and measuring the real part before trusting its model.
 
 ### Example: the wheels
 
-![Three printed, fitted parts: the wheel adapter cut open to show its two corner ears, a hub cheek with ball sockets for the real rollers, and the final ten-spoke cheek](docs/wheel-chain.png)
-
-A small mecanum robot's wheels took 17 recorded print outcomes from July to October:
+The three parts pictured at the top took 17 recorded print outcomes from July to October:
 
 | Date | Print | Outcome |
 |---|---|---|
-| 08-07 | five-rung bore ladder for the motor-to-wheel adapter | 3.15 mm glove tight, 3.10 would not go on, 3.05 had to be forced |
+| 08-07 | five-rung bore ladder for the motor-to-wheel adapter | 3.15 mm glove-tight, 3.10 would not go on, 3.05 had to be forced |
 | 08-12 | the adapters on the assembled robot | some wheels rub the body: the CAD had a zero gap, which an overlap check reads as fine |
 | 09-26 | the ear ladder ([worked example](examples/n20-ear-ladder)) | the 3.10 bore slides on with two corner ears: "the ears were perfect", and every adapter since has them |
 | 09-28 | hub cheeks cut from the vendor's wheel model | the real rollers would not go in |
@@ -246,6 +251,9 @@ it. `cad-parts/hooks/require_runner.py` turns that instruction into a rule: regi
 Code hook, it reads every command Claude sends to its Bash or PowerShell tool and refuses one that
 starts the venv's Python directly, with the runner command to use instead. `-m pip`, `--version`
 and commands that only name the venv path (copying a file into it, listing it) still go through.
+A command counts as the runner only when the program it starts is `run_watchdogged.ps1` (called
+directly or through `powershell -File`); the name in an argument or a comment does not count, and
+a command string handed to a new shell (`powershell -Command`, `bash -c`) is read too.
 Add it to `%USERPROFILE%\.claude\settings.json`, merging with any hooks you already have:
 
 ```json
@@ -268,14 +276,17 @@ Add it to `%USERPROFILE%\.claude\settings.json`, merging with any hooks you alre
 ```
 
 It is plain Python with no imports beyond the standard library, about 0.15 s per shell command.
-`hooks/test_require_runner.py` checks 13 commands it must refuse and 12 it must let through; CI
+`hooks/test_require_runner.py` checks 22 commands it must refuse and 17 it must let through; CI
 runs it on every push.
 
 **The export gate.** `export_checked` requires a valid B-rep, writes the STEP, meshes a copy of
 the shape (so the caller's solid is never meshed in place), and reloads the STL with trimesh:
 watertight, consistent winding, else a gentle repair that is kept only if the volume moves less
-than 0.5 %. The repair can only merge vertices closer than 0.0001 mm and patch gaps three or four
-edges wide, so it cannot erase a rib or close a real hole. Then the STEP is read back from disk
+than 0.5 %. The repair only merges vertices closer than 0.0001 mm and patches open loops of three
+or four edges, which a meshed solid has only where its tessellation cracked. That keeps it to
+hairline defects, and the STEP comparison below checks the result again, but it is not a proof
+that every small feature survives: a tiny opening that meshes to a three- or four-edge loop
+could be patched. Then the STEP is read back from disk
 and the STL has to agree with it: bounding box within 0.05 mm or 0.5 % of the part's size,
 volume within 1.5 %. Every check raises `GateError` explicitly rather than using `assert`, so
 `python -O` cannot switch the gate off. Any failed check stops the build.
@@ -360,8 +371,11 @@ touched outside its own folder.
   what was written down, not on a real conversation.
 - **The memory cap needs the runner.** It covers what `run_watchdogged.ps1` launches. Without the
   hook, using the runner is an instruction, and the evals caught one skill run starting CadQuery
-  outside it; with the hook registered, Claude Code refuses those calls. Commands Claude does
-  not send through its Bash or PowerShell tools are outside the hook's reach.
+  outside it; with the hook registered, Claude Code refuses those calls. The hook is a guard
+  against forgetting, not a security boundary: it reads command text with patterns, so a
+  determined workaround (a script that launches Python itself, a variable built up in pieces) can
+  still get past it, and commands Claude does not send through its Bash or PowerShell tools are
+  outside its reach.
 - **CI skips the render group.** GitHub's Windows runners have no OpenGL 3.2, which VTK's
   offscreen renderer needs (`CADPARTS_SKIP_RENDER=1`); every local install runs it.
 

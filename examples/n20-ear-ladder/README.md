@@ -26,7 +26,7 @@ shaft's flat is engaged, and changes nothing else. Four rungs:
 
 | Rung | Bore / flat (mm) | Without ears it was |
 |---|---|---|
-| A | 3.15 / 2.55 | the shipped fit, glove tight |
+| A | 3.15 / 2.55 | the shipped fit, glove-tight |
 | B | 3.10 / 2.50 | **did not go on**: the decisive rung |
 | C | 3.05 / 2.45 | had to be forced to even start |
 | D | 3.00 / 2.40 | nominal, never tried |
