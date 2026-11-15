@@ -1,6 +1,6 @@
 # Eval results, 2026-11-14
 
-Two batches on the same day, each in the same three arms, one run per cell:
+Three batches on the same day. Batches 1 and 2 ran in the same three arms, one run per cell:
 
 - **Fable 5.1, medium effort, with the skill**
 - **Fable 5.2, high effort, with the skill**
@@ -8,9 +8,9 @@ Two batches on the same day, each in the same three arms, one run per cell:
 
 Batch 1 ran the six original prompts (evals 1 to 6). Batch 2 ran two harder prompts rebuilt from
 failures the skill was written after (evals 8 and 9). A third hard prompt, eval 7, is built but
-was not run; see [Eval 7: built, not run](#eval-7-built-not-run). Evals 10 to 12 bury batch 2's
-two failures the way the originals were buried; they are built and their grading is checked, but
-they have not been run; see [Batch 3](#batch-3-evals-10-to-12-built-not-run).
+was not run; see [Eval 7: built, not run](#eval-7-built-not-run). Batch 3 (evals 10 to 12) buries
+batch 2's two failures the way the originals were buried; so far only its no-skill arm has run;
+see [Batch 3](#batch-3-evals-10-to-12-no-skill-arm).
 
 Every run was headless Claude Code 2.1.325 (`claude -p --safe-mode`, no session persistence, web
 tools off) in its own fresh folder, inside a job object with a 12 GB cap. The user prompt was the
@@ -175,10 +175,11 @@ three to four times the tokens (under three times the cost) and over twice the w
 A harder test of the claim would bury the same failures the way the originals were buried: a
 larger part, a deeper chain, or the failure met late in a long session.
 
-## Batch 3: evals 10 to 12, built, not run
+## Batch 3: evals 10 to 12, no-skill arm
 
 The same two failures, buried the way the originals were. Each eval hands the run a folder: a part
-folder or a whole project.
+folder or a whole project. Only the no-skill arm has run so far
+([below](#no-skill-arm)); the skill arms have not.
 
 | # | Prompt, abridged (verbatim in `evals.json`) | How the failure is buried |
 |---|---|---|
@@ -215,6 +216,63 @@ and the bad eval 12 answer with its STEPs deleted grades the same from its STLs 
 check for the problem named in the run's own words found it in every good transcript and in no
 bad one.
 
+### No-skill arm
+
+Fable 5.2, high effort, no skill, one run per eval (harness and spec at repo commit a27c765):
+
+| | Eval 10, shell slot | Eval 11, plate chain | Eval 12, punch list |
+|---|---|---|---|
+| Planted problem seen and named | yes | yes | yes |
+| Delivered part right, measured | no: 2 HIGH islands, 19.2 mm tall from bed+4.8 | yes: sled fits step 10c, pilots 18 apart | no: shell has 2 HIGH islands, 14.0 mm tall from bed+10, 2.0 mm thin |
+| What it did about the problem | "it needs support under it" | moved `rover_refs.py` to step 10c, built against it | trimmed the spikes, "v4 needs supports" |
+| FROZEN input left as it was | yes (new v8) | yes (new v17; v16 was a trial) | yes (four new versions) |
+| CadQuery processes run with no memory cap | 2 | 2 | 10 |
+| Render made | no | no | no |
+| Questions and assumptions written down | yes | yes | yes |
+| Tokens / cost at API list prices / wall | 0.44 M / $1.42 / 3.4 min | 0.36 M / $1.48 / 3.0 min | 0.80 M / $3.11 / 8.1 min |
+
+10. **Shell slot.** The run made v8 (v7 is FROZEN), cut the 40 x 12 slot, checked the tray, the
+    tyres and every chassis part, and saw what the slot does: "the wall between the arches is only
+    36.5 mm wide at the plate", so "the side wall between the wheels no longer touches the bed; it
+    starts at z=12, so it needs support under it". Its one question to the user was whether to trim
+    the pointed tabs left either side of the slot. The shell it shipped has the two HIGH islands
+    the eval plants: a 2.4 mm wall standing on supports from bed+4.8 to the arch crowns at bed+24.
+11. **Plate chain.** The run read fourteen files before acting, every README and every plate step
+    script among them, found that `rover_refs.py` loads step 8c while `current.json` and the plate
+    README name 10c, changed that one line, and built v17 against 10c: seated on its underside at
+    z -4, no overlap, both bolt holes on its sled holes, the new pilots 18 apart. It also caught
+    the knock-on effects: the emitters sit 1 mm lower, and the lip now reaches the bumper's nut row
+    (it checked the clearance).
+12. **Punch list.** All four items were done, each in a new version, and measure right: a D20
+    hole, tabs 5.0 mm, the face at 15.0 deg, arches R32. On the shell the run saw that the arches
+    meet the dock slot and that "the wall between the arches now hangs from the roof, and its lower
+    edge starts in mid-air on the printer". It trimmed the four spikes the pillars left, told the
+    user "v4 needs supports (build plate only)", and wrote that the pillars carried no load. The
+    shell it shipped has two HIGH islands, 14.0 mm tall from bed+10 to bed+24, 2.0 mm thin. It
+    also caught something the eval did not plant: 60 mm wheels lift the robot 4 mm, so the dock's
+    contact bar no longer meets it at plate height.
+
+The two shell STLs the runs delivered read not watertight to trimesh: 16 zero-length open edges
+and 16 edges on three faces, at the shells' fillet corners. The shells as given export the same way
+through plain `cq.exporters`, and the skill's `export_checked` repairs them on its own (vertex
+merge at 5 digits). Both runs told the user the STL was watertight.
+
+#### What this shows, and what it does not
+
+Burying the island did not hide it. In both island evals the bare model found the hanging wall,
+named it, and then treated it as a print setting and shipped the part on supports. That is the
+call that broke the original print: on 2026-10-09 the print plan listed the tunnel tops as
+expected support, and the pillar standing on them snapped partway through. It is also the call
+the skill's fourth non-negotiable rules out: "a HIGH island is a design problem to fix or put to
+the user before any print plan, never 'supports will handle it'". Whether the skill arms do
+better here is not measured yet.
+
+Burying the drift did not work. In a 17-file project the bare model reads every file before it
+starts, so the stale pin is never more than one read away. A harder version needs a project too
+big to read whole, or the pin met late in a long session.
+
+One run per eval: each cell is one sample, not a rate.
+
 ## Grading notes
 
 - Batch 2's process counts were checked by hand against every transcript, and `grade.py` now
@@ -235,12 +293,22 @@ bad one.
   for field, and batch 2 changes in two file lists only: the two no-skill runs that edited their
   input script in place now list it. `make_assets.py` builds the eval 11 plate chain by running
   the chain's own step scripts in order (`MAKE_ASSETS=11` rebuilds only that).
+- Batch 3's process counts were checked by hand against every transcript, and `grade.py` now
+  matches them. It follows the shell's folder from a leading `cd` to the commands after it,
+  expands loops like `for f in a.py b.py; do "$PY" dir/$f; done`, and reads a scratch script the
+  run deleted from what the run wrote. Before this, the eval 12 no-skill run read 0 uncapped
+  CadQuery processes instead of 10 and the eval 10 run 1 instead of 2. Re-graded, batches 1 and 2
+  are unchanged. The island text check now also matches "touches the bed" and "off the bed"
+  (eval 10's run wrote "no longer touches the bed"), and the island evals record what the hand-over
+  says about supports (`supports_said`).
+- Batch 3's skill copy was put in the run folder only after the no-skill runs finished (the
+  grader needs it for the island check), so those runs could not have found it.
 
 ## Isolation
 
 `--safe-mode` disables CLAUDE.md files, skills, installed plugins, hooks and MCP servers. In all
-24 runs the session's skill list held only Claude Code's built-in skills, no hook produced an
-event, and no MCP server was connected. The session's init event still lists the plugins
+24 runs of batches 1 and 2, and in batch 3's three, the session's skill list held only Claude
+Code's built-in skills, no hook produced an event, and no MCP server was connected. The session's init event still lists the plugins
 installed on the machine, but none of their skills appeared in any run. Safe mode does not
 sandbox the filesystem. One no-skill run (batch 1, eval 2) listed and searched folders above its
 own while looking for the missing helper library. Nothing was there to find (the skill copy the

@@ -435,7 +435,9 @@ def eval12_check(files, run):
 
 # Text a run wrote to the user (final message + QUESTIONS.md) that raises the eval's problem.
 ISLAND_RAISED = re.compile(r"\bisland|floating|\bfloats\b|\bhang(s|ing)?\b|mid-?air|unsupported|above the bed"
-                           r"|nothing under", re.I)
+                           r"|nothing under|touch(es)? the bed|off the bed", re.I)
+# What a run tells the user to print it with: "it needs supports" is the answer the skill rules out
+SUPPORTS_SAID = re.compile(r"\bsupports?\b", re.I)
 RAISED = {
     7: re.compile(r"machine.killer|b-?spline|non-uniform scal|nonuniform scal|transformGeometry", re.I),
     8: ISLAND_RAISED,
@@ -506,52 +508,12 @@ def runner_calls(cmd, shell):
     return [a for a in args if not a.startswith("<")]
 
 
-def cad_runs(cmd, run, shell="PowerShell"):
-    """(runner runs, CadQuery runs outside the runner) started by one shell command."""
-    calls = runner_calls(cmd, shell)
-    if calls:
-        return len(calls), 0
-    uncapped = 0
-    hits = [(m.group(1), m.group(2)) for m in PY_INV.finditer(cmd)]
-    if "python.exe" in cmd.lower():
-        hits += [(m.group(1), m.group(1)) for m in PS_INV.finditer(cmd)]
-        hits += [("-c", None) for _ in PS_INL.finditer(cmd)]
-    for flag, script in hits:
-        if script:
-            p = Path(script.strip("\"'"))
-            p = p if p.is_absolute() else run / p
-            try:
-                text = p.read_text(encoding="utf-8", errors="replace") if p.is_file() else ""
-            except OSError:
-                text = ""
-            uncapped += int(bool(CAD_IMPORT.search(text)))
-        else:
-            uncapped += int(bool(CAD_IMPORT.search(cmd)))
-    return 0, uncapped
-
-
-def ran_scripts(cmd, run, shell="PowerShell"):
-    """(scripts run under the runner, Python scripts run outside it, inline -c code run outside it)
-    for one shell command. A script named by a variable shows as '?'."""
-    def resolve(s):
-        if s.startswith("$"):
-            return None
-        p = Path(s.strip("\"'"))
-        return p if p.is_absolute() else run / p
-    calls = runner_calls(cmd, shell)
-    if calls:
-        return [resolve(a) for a in calls], [], []
-    scripts, inline = [], []
-    hits = [(m.group(1), m.group(2)) for m in PY_INV.finditer(cmd)]
-    if "python.exe" in cmd.lower():
-        hits += [(m.group(1), m.group(1)) for m in PS_INV.finditer(cmd)]
-        hits += [("-c", None) for _ in PS_INL.finditer(cmd)]
-    for _flag, script in hits:
-        if script:
-            scripts.append(resolve(script))
-        else:
-            inline.append(cmd)
-    return [], scripts, inline
+# A Bash loop that runs a script per item: for f in a.py b.py; do "$PY" dir/$f; done
+LOOP = re.compile(r"\bfor\s+(\w+)\s+in\s+([^;\n]+?)\s*;\s*do\b(.*?)\bdone\b", re.S)
+# The folder a command starts by moving into: cd "x" && ..., Set-Location x; ...
+LEAD_CD = re.compile(r"""^\s*(?:cd|Set-Location|sl|pushd)\s+(?:-Path\s+)?(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))""", re.I)
+# A heredoc that writes a file: its target and its body (cat > x.py <<'EOF' ... EOF)
+HEREDOC_FILE = re.compile(r"""(?ms)^[^\n]*\bcat\s*>\s*["']?([^\s"'<>]+)["']?\s*<<-?\s*['"]?(\w+)['"]?[^\n]*\n(.*?)^\s*\2\s*$""")
 
 
 def file_text(p):
@@ -559,6 +521,73 @@ def file_text(p):
         return p.read_text(encoding="utf-8", errors="replace") if p is not None and p.is_file() else ""
     except OSError:
         return ""
+
+
+def as_path(s, base):
+    """A path as a command wrote it (quoted, or Git Bash's /c/...), taken against the folder the
+    command runs in."""
+    p = Path(re.sub(r"^/([a-zA-Z])/", r"\1:/", s.strip("\"'")))
+    return p if p.is_absolute() else base / p
+
+
+def path_key(p):
+    return str(p).replace("/", "\\").lower()
+
+
+def lead_cd(cmd, base):
+    """The folder a command moves into before anything else, or None."""
+    m = LEAD_CD.match(cmd)
+    return None if not m else as_path(next(g for g in m.groups() if g), base)
+
+
+def script_text(p, run, written):
+    """A script's text: the file as it stands at grading time, else what the run last wrote to that
+    path (a scratch script it deleted before finishing), else the run folder's only file of that
+    name."""
+    if p is None:
+        return ""
+    if p.is_file():
+        return file_text(p)
+    if path_key(p) in written:
+        return written[path_key(p)]
+    same = [q for q in run.rglob(p.name) if q.is_file()]
+    return file_text(same[0]) if len(same) == 1 else ""
+
+
+def python_runs(cmd, run, shell, base, written):
+    """Every Python process one shell command starts: (the -Script arguments of runner starts,
+    [(kind, script path, text)] for processes outside the runner). kind is "script" (path None when
+    a variable names it) or "inline" (-c, -m, or code on stdin; its text is the command). base is
+    the folder the command runs in; written maps paths the run wrote to their last text."""
+    calls = runner_calls(cmd, shell)
+    if calls:
+        return [None if a.startswith("$") else as_path(a, base) for a in calls], []
+    body = FILE_HEREDOC.sub(r"\1", cmd) if shell == "Bash" else cmd
+    hits = [m.group(2) or "" for m in PY_INV.finditer(body)]
+    if "python.exe" in cmd.lower():
+        hits += [m.group(1) for m in PS_INV.finditer(body)]
+        hits += ["" for _ in PS_INL.finditer(body)]
+    found = []
+    for s in hits:
+        if not s:
+            found.append(("inline", None, body))
+        else:
+            p = None if s.strip("\"'").startswith("$") else as_path(s, base)
+            found.append(("script", p, script_text(p, run, written)))
+    for var, items, loop in LOOP.findall(body):
+        arg = re.compile(r"""(?:python(?:\.exe)?["']?|\$\{?\w+\}?"?)\s+(?:-[A-Za-z]+\s+)*["']?"""
+                         r"""([^\s"';|&]*\$\{?%s\}?[^\s"';|&]*)""" % var)
+        for m in arg.finditer(loop):
+            for item in items.split():
+                p = as_path(re.sub(r"\$\{?%s\}?" % var, item.strip("\"'"), m.group(1)), base)
+                found.append(("script", p, script_text(p, run, written)))
+    return calls, found
+
+
+def cad_runs(cmd, run, shell="PowerShell", base=None, written=None):
+    """(runner runs, CadQuery runs outside the runner) started by one shell command."""
+    calls, found = python_runs(cmd, run, shell, base or run, written or {})
+    return len(calls), sum(bool(CAD_IMPORT.search(t)) for _k, _p, t in found)
 
 
 # Tool calls whose input names one of these (a file read, a command, code written).
@@ -579,6 +608,10 @@ def transcript(tag, run):
         return facts
     run_s = str(run.resolve()).lower()
     allowed = [run_s, str(SKILL).lower(), str(VENV).lower()]
+    cwd, written = run, {}   # the shell's folder (a leading cd persists) and files the run wrote
+
+    def shown(p):
+        return "?" if p is None else (str(p.relative_to(run)) if p.is_relative_to(run) else str(p))
     for line in path.read_text(encoding="utf-8", errors="replace").splitlines():
         try:
             ev = json.loads(line)
@@ -605,20 +638,28 @@ def transcript(tag, run):
                 cmd = inp.get("command", "")
                 if "skill.md" in cmd.lower() and "cad-parts" in cmd.lower():
                     facts["read_skill"] = True
-                capped, uncapped = cad_runs(cmd, run, name)
-                facts["runner_runs"] += capped
-                facts["uncapped_cad_runs"] += uncapped
-                # which scripts ran, and whether their code (as it stands at the end) scales the B-rep
-                rc, ru, inline = ran_scripts(cmd, run, name)
-                for key, scripts in (("capped", rc), ("uncapped", ru)):
-                    for p in scripts:
-                        facts["runner_scripts" if key == "capped" else "uncapped_scripts"].append(
-                            "?" if p is None else (str(p.relative_to(run)) if p.is_relative_to(run) else str(p)))
-                        facts["brep_scale"][f"runs_{key}"] += brep_scale_calls(file_text(p)) > 0
-                facts["brep_scale"]["runs_uncapped"] += sum(bool(BREP_SCALE_RE.search(x)) for x in inline)
+                base = lead_cd(cmd, cwd) or cwd
+                for target, _end, text in (HEREDOC_FILE.findall(cmd) if name == "Bash" else []):
+                    written[path_key(as_path(target, base))] = text
+                # which Python processes it started, capped or not, and whether their code scales the B-rep
+                calls, found = python_runs(cmd, run, name, base, written)
+                facts["runner_runs"] += len(calls)
+                for p in calls:
+                    facts["runner_scripts"].append(shown(p))
+                    facts["brep_scale"]["runs_capped"] += brep_scale_calls(script_text(p, run, written)) > 0
+                for kind, p, text in found:
+                    facts["uncapped_cad_runs"] += bool(CAD_IMPORT.search(text))
+                    if kind == "script":
+                        facts["uncapped_scripts"].append(shown(p))
+                        facts["brep_scale"]["runs_uncapped"] += brep_scale_calls(text) > 0
+                    else:
+                        facts["brep_scale"]["runs_uncapped"] += bool(BREP_SCALE_RE.search(text))
+                cwd = base
             if name in ("Write", "Edit"):
                 fp = str(inp.get("file_path", ""))
                 code = inp.get("content") or inp.get("new_string") or ""
+                if name == "Write":
+                    written[path_key(Path(fp))] = inp.get("content") or ""
                 if fp.lower().endswith(".py") and brep_scale_calls(code):
                     facts["brep_scale"]["written"].append(Path(fp).name)
             if name == "Read":
@@ -707,6 +748,9 @@ def grade_run(cfg, arm, eid):
     qmd = next((p for p in files if p.name.upper() == "QUESTIONS.MD"), None)
     said = g["transcript"]["final_text"] + "\n" + (file_text(qmd) if qmd else "")
     g["raised"] = raised(eid, said)
+    if eid in (8, 10, 12):  # the island evals: does the hand-over lean on supports?
+        g["supports_said"] = [re.sub(r"\s+", " ", said[max(0, m.start() - 90):m.end() + 60]).strip()
+                              for m in SUPPORTS_SAID.finditer(said)][:4]
     st = LOGS / f"{tag}.status.json"
     if st.exists():
         s = json.loads(st.read_text(encoding="utf-8-sig"))
@@ -751,6 +795,8 @@ def main():
                           f"uncapped={b['runs_uncapped']}) killed={g.get('harness', {}).get('killed')}", flush=True)
                     print(f"   runner_scripts={t['runner_scripts']} uncapped_scripts={t['uncapped_scripts']}", flush=True)
                     print(f"   raised: {g['raised']!r}", flush=True)
+                    if "supports_said" in g:
+                        print(f"   supports_said: {g['supports_said']!r}", flush=True)
                 if eid == 7:
                     s7 = g["stretch"]
                     print(f"   stl_ok={s7['stl_ok']} brep_scaled_steps={s7['brep_scaled_steps']}", flush=True)
