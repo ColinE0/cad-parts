@@ -331,6 +331,15 @@ the guard from the old and new meshes and assert the rest is identical.
   hole-placement probe on a 446-face robot tub took 474 s). Full-assembly
   builds are for the final fit check. If a probe will need more than about a
   minute, narrow it before running it.
+- **Fillet the root of thin features.** Slender, fragile features (boss
+  standoffs, posts, thin ribs and tabs) get a fillet where they meet the body,
+  so the load spreads instead of concentrating at a sharp inside corner, which
+  is where printed standoffs snap (two Ø1.6 screw posts split this way).
+  Size it to the feature (roughly half to one wall thickness), and keep it off
+  anything that mates: a screw head's seat, a board resting on the boss top,
+  an insertion path. Check the fillet actually landed (`is_noop`, or the
+  volume grew), since OCCT can fail a fillet quietly, and mention it in the
+  hand-over so the user knows it's there.
 
 ## Environment facts
 
