@@ -5,21 +5,23 @@
 [![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-D97757)](https://claude.com/claude-code)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
-A Claude Code skill (Windows) for designing 3D-printable parts with CadQuery. You ask for a part in plain
-words ("an M4 spacer, 12 mm tall, 9 mm OD") or hand over a drawing, and you get back an STL and a
-STEP that were measured and checked before you see them. Builds go through a memory-capped runner
-(a hook can make that a rule). Every STL has to pass a watertight check and agree with its STEP.
-Every part is rendered and the render is read. A part that already printed and fit is never
-edited in place. None of that proves a part will fit or print well: the
+A Claude Code skill (Windows) I use to design 3D-printable parts with CadQuery. You ask for a part
+in plain words ("an M4 spacer, 12 mm tall, 9 mm OD") or hand it a drawing, and you get back an STL
+and a STEP that have *actually* been measured and checked before you ever see them. Builds go
+through a memory-capped runner (a hook can make that a rule). Every STL has to pass a watertight
+check and agree with its STEP. Every part gets rendered, and the render gets read. And a part that
+already printed and fit never gets edited in place.
+
+None of that proves a part will fit or print well, and I'm not going to pretend it does. The
 [physical record](#physical-record) shows how often it still doesn't, and why.
 
 > **Windows 10/11 only for now.** The memory cap is a Windows job object driven from PowerShell.
-> macOS and Linux would need the same idea built on cgroups or `setrlimit`, which is not written
-> yet (see [Limitations](#limitations)). The rest of the skill is plain CadQuery and Python.
+> macOS and Linux would need the same idea built on cgroups or `setrlimit`, which I haven't
+> written yet (see [Limitations](#limitations)). The rest of the skill is plain CadQuery and Python.
 
 ![Three printed, fitted parts: the wheel adapter cut open to show its two corner ears, a hub cheek with ball sockets for the real rollers, and the final ten-spoke cheek](docs/wheel-chain.png)
 
-Three parts from a small robot's mecanum wheels, all printed and fitted. Getting there took 17
+Three parts from my robot's mecanum wheels, all printed and fitted. Getting there took 17
 recorded print outcomes; [the story](#example-the-wheels) is below.
 
 ## Quickstart
@@ -55,47 +57,48 @@ Details, updates and the optional hook are under [Install](#install).
 
 ## Why this exists
 
-Most "3D modeling with Claude" means asking for OpenSCAD or CadQuery code, running whatever comes
-back, and opening the STL to see whether it looks right. Current models write that code well.
-What goes wrong is everything around the code, and every rule in this skill comes from one of
-those failures on real parts:
+Most "3D modeling with Claude" is asking for OpenSCAD or CadQuery code, running whatever comes
+back, and opening the STL to see if it looks right. The thing is, current models write that code
+*well*. What goes wrong is everything around the code. I built this over four months of designing
+parts for a robot, and every rule in it comes from something that actually broke:
 
-| What goes wrong | What the skill does about it |
+| What went wrong | What the skill does about it |
 |---|---|
 | A CAD job inside a long-running process ran away with memory and took the whole machine down. | Scripts run through a runner that puts them in a Windows job object, with a kernel-enforced memory cap and a timeout over the whole process tree. A runaway loses one run, not the machine. Using the runner is the skill's rule; the optional hook makes Claude Code refuse to skip it. |
-| A B-rep that passes `isValid()` still exports an STL the slicer calls non-manifold. | `export_checked` gates every export: valid solid, watertight and consistently wound STL, gentle auto-repair only when the volume moves less than 0.5 %, and an STL that matches the STEP read back from disk in size and volume. |
-| Dimensions get "verified" by asserting an input constant against itself. | Features are checked by measuring the built solid, and a 6-view render is read before anything is reported. |
-| The model edits the script for a part that already printed and fit, and the working version is gone. | Every script carries a `STATUS:` line. FROZEN parts are never edited; variants get a new file that names its delta. |
-| A part passes every fit check and still cannot be printed: a pillar starts in mid-air on supports and snaps off partway through a 22-hour print. | `islands()` slices the part in its print orientation and flags material that starts above the bed. |
-| A drawing's `Ø` gets read as a `9`, or a feature is skipped. | Parts from images start with a written feature decomposition the user confirms, and end with a side-by-side render against the drawing. |
+| A B-rep that passes `isValid()` still exported an STL the slicer called non-manifold. | `export_checked` gates every export: valid solid, watertight and consistently wound STL, gentle auto-repair only when the volume moves less than 0.5 %, and an STL that matches the STEP read back from disk in size and volume. |
+| Dimensions got "verified" by asserting an input constant against itself. | Features are checked by measuring the built solid, and a 6-view render is read before anything is reported. |
+| The model edited the script for a part that already printed and fit, and the working version was gone. | Every script carries a `STATUS:` line. FROZEN parts are never edited; variants get a new file that names its delta. |
+| A part passed every fit check and still couldn't be printed: a pillar started in mid-air on supports and snapped off partway through a 22-hour print. | `islands()` slices the part in its print orientation and flags material that starts above the bed. |
+| A drawing's `Ø` got read as a `9`, or a feature got skipped. | Parts from images start with a written feature decomposition the user confirms, and end with a side-by-side render against the drawing. |
 
 ## What it does
 
 - Writes a CadQuery script per part, every dimension a named constant, with asserts on the
   bounding box and on derived features.
-- Runs it through `run_watchdogged.ps1` (4 GB cap and 300 s timeout by default; exit 137 names
-  whether the cap or the clock fired).
+- Runs it through `run_watchdogged.ps1` (4 GB cap and 300 s timeout by default; exit 137 tells
+  you whether the cap or the clock fired).
 - Exports STEP plus STL through the watertight gate, renders 6 views, checks for islands.
 - Keeps each part in its own folder with a README that names the one file to print.
 - Repairs broken STLs with numbers (open edges, loops, winding) instead of guesses.
 - Chains dependent parts to a pinned parent (`current.json` plus a geometric fingerprint), so a
-  bracket fails loudly when the plate it bolts to changes underneath it.
-- Ships `references/gotchas.md`: the OpenCASCADE and toolchain traps it has already hit, each
-  with the date and the part it broke.
+  bracket fails *loudly* when the plate it bolts to changes underneath it.
+- Ships `references/gotchas.md`: the OpenCASCADE and toolchain traps I've already hit, each with
+  the date and the part it broke.
 
 ## Results
 
-Eleven eval prompts, 38 headless Claude Code runs on 2026-11-14 and 15: one run per cell, except
-the two buried island evals, which ran three times per setup (full write-up in
-[evals/RESULTS.md](evals/RESULTS.md)). The buried evals come first: they are where the skill
-changed the outcome. In the others, both setups mostly got the part right.
+I ran eleven eval prompts as 38 headless Claude Code runs on 2026-11-14 and 15. Most cells are
+one run; the two buried island evals ran three times per setup, because that's the result
+everything else leans on (full write-up in [evals/RESULTS.md](evals/RESULTS.md)). The buried evals
+come first since they're where the skill changed the outcome. In the others, both setups mostly
+got the part right.
 
-**Three buried ones.** The original failures happened deep in real projects, so these bury the
-same two the way they happened: a slot asked for in a 230 mm robot shell with a dozen features,
-which quietly takes the whole foot of the wall between the wheel arches; a small edit to a part
-in a 17-file project whose shared helper still loads an old plate; and the last of four routine
-edits, where bigger wheel arches leave that same wall hanging. No prompt names the problem.
-Fable 5.2 high only (the 5.1 medium arm was not run).
+**Three buried ones.** My original failures happened deep in real projects, so these bury the
+same two failures the way they happened to me: a slot asked for in a 230 mm robot shell with a
+dozen features, which quietly takes the whole foot of the wall between the wheel arches; a small
+edit to a part in a 17-file project whose shared helper still loads an old plate; and the last
+of four routine edits, where bigger wheel arches leave that same wall hanging. No prompt names
+the problem. Fable 5.2 high only (the 5.1 medium arm wasn't run).
 
 | | Fable 5.2 high + skill | Fable 5.2 high, no skill |
 |---|---|---|
@@ -135,45 +138,48 @@ past.
 
 ![Eval 8's sled bridge: a tunnel cut that clears the sled leaves the centre post hanging 10 mm above the bed; islands() rates it HIGH, and the grounded fix reads clean](docs/island-check.png)
 
-The honest reading: on small parts in short prompts, a current model gets the geometry right on
-its own and spots both rebuilt failures. The skill does not make it smarter there; it makes the
-work safe and checkable. It measures what the bare model reasons about, keeps CAD processes
+**How I read it.** On small parts in short prompts, a current model gets the geometry right on
+its own and spots both rebuilt failures. The skill doesn't make it smarter there; it makes the
+work safe and checkable. It measures what the bare model only reasons about, keeps CAD processes
 behind the memory cap (two slips in 23 skill runs, both a bare `python -c` that imported the
 helpers to read their signatures; the hook now refuses that), gets the memory kill right instead
 of "raise the limit", and pins a dependent part to its parent so the next change fails loudly
-instead of passing quietly. Buried deep, the difference shows up in the outcome: in six runs per
-setup the same model saw the same hanging wall every time, but without the skill it called it a
-support setting and shipped it all six times, which is exactly the call that snapped a real
-22-hour print. With the skill it refused all six times and recommended a printable part. Both arms found the stale plate, since the bare model read all 17 files first. The skill
-costs two to four times the tokens. A twelfth prompt, a non-uniform scale of an imported STEP, is
-built but was not run: replayed under the runner, the op once blamed for a machine crash finished
-in 0.24 s with no extra memory.
+instead of passing quietly.
+
+Buried deep is where it really shows. In six runs per setup, the same model saw the same hanging
+wall *every* time. Without the skill, it called it a support setting and shipped it all six
+times, which is exactly the call that snapped my 22-hour print. With the skill, it refused all
+six times and recommended a printable part. Both setups found the stale plate, since the bare
+model read all 17 files first. The skill costs two to four times the tokens.
+
+A twelfth prompt, a non-uniform scale of an imported STEP, is built but wasn't run: replayed under
+the runner, the op I'd once blamed for a machine crash finished in 0.24 s with no extra memory.
 
 ## Physical record
 
-The evals are small prompts. The real record is every print reported since this workflow started
-on 2026-07-15: 79 printed revisions of parts made with it, 53 of them with a reported verdict.
+The evals are small prompts. The real record is every print I've reported since this workflow
+started on 2026-07-15: 79 printed revisions of parts made with it, 53 of them with a verdict.
 
 | Outcome | Prints |
 |---|---|
 | Worked | 21 |
 | Failed: the geometry was wrong | 18 |
-| Failed: a number or requirement in the request was wrong | 8 |
+| Failed: a number or requirement in my request was wrong | 8 |
 | Failed: the printer or slicer | 4 |
 | Failed: cause not established | 2 |
 
 There were also 12 deliberate fit-tuning series (bore and spacing ladders, at least 20 prints) and
 14 printed parts with no recorded outcome. The tally comes from the parts' `STATUS:` lines, the
-part-folder notes and the session history; most verdicts are a fit by hand, not a measurement.
+part-folder notes and the session history. Most verdicts are a fit by hand, not a measurement.
 
 **What it says about the checks.** Only 2 of the 18 geometry failures would be caught by a gate
 in the skill today: a pillar that printed in mid-air (`islands()` exists because of it) and a lid
-that would not close (`interference()`). The other 16 were insertion paths blocked by a feature,
-loads that crushed or split a part, a vendor model that did not match the real part, and
-tolerances and threads that took a ladder to find. No print failed because a working part was
-edited or an STL was bad: those gates stop their problems before the printer does. The next
-checks belong where the failures are: insertion paths, a minimum clearance rather than zero
-overlap, and measuring the real part before trusting its model.
+that wouldn't close (`interference()`). The other 16 were insertion paths blocked by a feature,
+loads that crushed or split a part, a vendor model that didn't match the real part, and
+tolerances and threads that took a ladder to find. On the other hand, no print failed because a
+working part got edited or an STL was bad: those gates stop their problems before the printer
+does. So the next checks belong where the failures are: insertion paths, a minimum clearance
+rather than zero overlap, and measuring the real part before trusting its model.
 
 ### Example: the wheels
 
@@ -196,7 +202,7 @@ The three parts pictured at the top took 17 recorded print outcomes from July to
 The adapter's ear ladder is published in full in [examples/n20-ear-ladder](examples/n20-ear-ladder):
 the frozen script, its falsifiable prediction, every rung's STEP, STL and render, and a rebuild that
 reproduces the printed rungs' volumes exactly. The cheeks and wheels are built on the wheel
-vendor's CAD model, so only their renders are shown.
+vendor's CAD model, so I'm only showing their renders.
 
 ## Install
 
@@ -219,7 +225,7 @@ Windows 10 or 11, about 10 minutes, once.
    It ends with `DONE` and "All set".
 
    Re-running is safe: a matching install is left as it is and tested again. If a different
-   copy is installed (an older version, or one you edited, such as your parts folder written
+   copy is installed (an older version, or one you edited, like your parts folder written
    into `SKILL.md`), the installer stops before changing anything. `-Force` then updates the
    skill and its helpers together and keeps the old folder in
    `%USERPROFILE%\.claude\cad-parts-backups`. For a venv somewhere else, pass `-VenvPath` and
@@ -233,10 +239,10 @@ Windows 10 or 11, about 10 minutes, once.
 Ask for a part, or type `/cad-parts` and what you want. The first time, Claude asks where your
 parts should live and can write that folder into the skill.
 
-- Give real numbers (calipers beat guesses) and say which side is the front.
+- Give it real numbers (calipers beat guesses) and say which side is the front.
 - When a print fits, say so: Claude marks the script FROZEN, and later changes go to a new file.
-- Hand it a drawing, a photo or a broken STL and say what you want; it will propose before it
-  builds when something load-bearing is open.
+- Hand it a drawing, a photo or a broken STL and say what you want. When something load-bearing
+  is still open, it'll propose before it builds.
 
 ## How it works
 
@@ -255,24 +261,25 @@ flowchart LR
 
 **The runner.** `C:\cadquery-venv\Scripts\python.exe` is a small uv trampoline that starts the
 real interpreter as a child, so watching the launcher's memory shows about 10 MB while the build
-eats gigabytes. The runner starts the launcher suspended, puts it in a job object with a
-job-wide committed-memory limit and kill-on-close, then resumes it. The interpreter and anything
-it spawns are born inside the job. An allocation past the cap is refused by the kernel, the
-runner kills the tree with `TerminateJobObject`, and if the runner itself dies the job takes the
-tree with it. It compiles its C# with Windows PowerShell 5.1 too. Every build starts without
-`PYTHONOPTIMIZE`, so a part script's own asserts always run.
+eats gigabytes (that one took me a while to figure out). The runner starts the launcher
+suspended, puts it in a job object with a job-wide committed-memory limit and kill-on-close, then
+resumes it. The interpreter and anything it spawns are born inside the job. An allocation past
+the cap is refused by the kernel, the runner kills the tree with `TerminateJobObject`, and if the
+runner itself dies, the job takes the tree with it. It compiles its C# with Windows PowerShell 5.1
+too. Every build starts without `PYTHONOPTIMIZE`, so a part script's own asserts always run.
 
 ### Making the runner a rule
 
-The runner caps only what it launches, and the skill tells Claude to launch everything through
-it. `cad-parts/hooks/require_runner.py` turns that instruction into a rule: registered as a Claude
-Code hook, it reads every command Claude sends to its Bash or PowerShell tool and refuses one that
-starts the venv's Python directly, with the runner command to use instead. `-m pip`, `--version`
-and commands that only name the venv path (copying a file into it, listing it) still go through.
-A command counts as the runner only when the program it starts is `run_watchdogged.ps1` (called
-directly or through `powershell -File`); the name in an argument or a comment does not count, and
-a command string handed to a new shell (`powershell -Command`, `bash -c`) is read too.
-Add it to `%USERPROFILE%\.claude\settings.json`, merging with any hooks you already have:
+The runner only caps what it launches, and the skill tells Claude to launch everything through
+it. But an instruction is just an instruction, so `cad-parts/hooks/require_runner.py` turns it
+into a rule. Registered as a Claude Code hook, it reads every command Claude sends to its Bash or
+PowerShell tool and refuses one that starts the venv's Python directly, with the runner command
+to use instead. `-m pip`, `--version` and commands that only name the venv path (copying a file
+into it, listing it) still go through. A command counts as the runner only when the program it
+starts is `run_watchdogged.ps1` (called directly or through `powershell -File`); the name in an
+argument or a comment doesn't count, and a command string handed to a new shell
+(`powershell -Command`, `bash -c`) gets read too. Add it to `%USERPROFILE%\.claude\settings.json`,
+merging with any hooks you already have:
 
 ```json
 {
@@ -293,21 +300,21 @@ Add it to `%USERPROFILE%\.claude\settings.json`, merging with any hooks you alre
 }
 ```
 
-It is plain Python with no imports beyond the standard library, about 0.15 s per shell command.
-`hooks/test_require_runner.py` checks 22 commands it must refuse and 17 it must let through; CI
-runs it on every push.
+It's plain Python with nothing beyond the standard library, about 0.15 s per shell command.
+`hooks/test_require_runner.py` checks 22 commands it must refuse and 17 it must let through, and
+CI runs it on every push.
 
 **The export gate.** `export_checked` requires a valid B-rep, writes the STEP, meshes a copy of
 the shape (so the caller's solid is never meshed in place), and reloads the STL with trimesh:
-watertight, consistent winding, else a gentle repair that is kept only if the volume moves less
+watertight, consistent winding, else a gentle repair that's kept only if the volume moves less
 than 0.5 %. The repair only merges vertices closer than 0.0001 mm and patches open loops of three
-or four edges, which a meshed solid has only where its tessellation cracked. That keeps it to
-hairline defects, and the STEP comparison below checks the result again, but it is not a proof
-that every small feature survives: a tiny opening that meshes to a three- or four-edge loop
-could be patched. Then the STEP is read back from disk
-and the STL has to agree with it: bounding box within 0.05 mm or 0.5 % of the part's size,
-volume within 1.5 %. Every check raises `GateError` explicitly rather than using `assert`, so
-`python -O` cannot switch the gate off. Any failed check stops the build.
+or four edges, which a meshed solid only has where its tessellation cracked. That keeps it to
+hairline defects, and the STEP comparison below checks the result again. It's *not* a proof that
+every small feature survives, though: a tiny opening that meshes to a three- or four-edge loop
+could get patched. Then the STEP is read back from disk and the STL has to agree with it:
+bounding box within 0.05 mm or 0.5 % of the part's size, volume within 1.5 %. Every check raises
+`GateError` explicitly rather than using `assert`, so `python -O` can't switch the gate off. Any
+failed check stops the build.
 
 **Islands.** `islands(part, up="+z")` slices the part every layer in its print orientation and
 joins regions layer to layer by overlap. A region that starts above the bed and only later joins
@@ -318,11 +325,11 @@ grounded material is an island; tall or slender ones are rated HIGH.
 1. **Checked:** every gate above passed, and so did the script's own asserts on the measured
    part (bounding box, feature sizes, clearance to modeled hardware).
 2. **Print-checked:** `islands()` found nothing HIGH in the orientation the part will print in.
-   That is a heuristic, not a printability guarantee: there is no minimum wall-thickness or
+   That's a heuristic, not a printability guarantee: there's no minimum wall-thickness or
    feature-size check yet.
 3. **Physically tested:** printed, and you said it fits. Only then does the script's `STATUS:`
    line change from `trial, unprinted` to something like `printed 2026-09-08 (K2), fitted,
-   FROZEN`. A FROZEN script is never edited again; changes go into a new file.
+   FROZEN`. A FROZEN script never gets edited again; changes go into a new file.
 
 **The rest of `cq_helpers`.** `describe`/`diff`/`is_noop` (geometry truth blocks, and a check
 for OpenCASCADE silently returning its input unchanged), `interference` (numeric overlap and
@@ -352,7 +359,7 @@ The harness runs each eval through headless Claude Code (`claude -p`) in a fresh
 a job object with a 12 GB cap and a 45-minute timeout, with `--safe-mode` so no personal
 CLAUDE.md, skills, plugins or hooks leak in. The skill arm gets the skill's path in an appended
 system prompt; the baseline arm gets the same environment note and nothing else. Both get the
-eval prompt verbatim. Needs PowerShell 7 and a Claude Code new enough for the model you pick.
+eval prompt verbatim. You'll need PowerShell 7 and a Claude Code new enough for the model you pick.
 
 ```powershell
 cd evals
@@ -364,6 +371,7 @@ pwsh -File harness\run_batch.ps1 -Jobs fable52-high:skill:1,fable52-high:baselin
 & ..\cad-parts\scripts\run_watchdogged.ps1 -Script harness\grade.py -Python (Resolve-Path venv\Scripts\python.exe) -TimeoutSec 600
 ```
 
+A fourth job field repeats a cell (`fable52-high:skill:10:2` writes `eval-10-r2`).
 `run_eval.ps1` finds the Claude desktop app's bundled CLI by default; pass `-ClaudeExe` to use
 another. `grade.py` measures every STL and STEP a run produced, checks the inputs are
 byte-identical afterwards, runs each eval's own checks (a bracket's seat and hole axes, the sled's
@@ -373,27 +381,29 @@ touched outside its own folder.
 
 ## Limitations
 
+I'd rather you hear these from me than find them yourself:
+
 - **Windows only.** The runner is a Windows job object driven from PowerShell. macOS and Linux
   would need the same idea through cgroups or `setrlimit`; not written yet.
 - **CadQuery / OpenCASCADE only**, and the defaults lean FDM and PLA (fastener clearances, the
   island risk thresholds).
 - **Eleven evals run, mostly one run per configuration.** Model output varies run to run, so most
-  cells in the results are one sample, not a rate; only the two buried island evals ran three
-  times per setup (6/6 against 0/6), and that is still a small sample. The two harder evals rebuild their failures on small
-  parts in short prompts, where the bare model catches them too; evals 10 to 12 bury them deeper,
-  and ran in the two Fable 5.2 arms only. The buried plate drift did not stay buried: in a
-  17-file project the bare model reads every file first.
+  cells in the results are one sample, not a rate. Only the two buried island evals ran three
+  times per setup (6/6 against 0/6), and that's still a small sample. The two harder evals
+  rebuild their failures on small parts in short prompts, where the bare model catches them too;
+  evals 10 to 12 bury them deeper and ran in the two Fable 5.2 arms only. The buried plate drift
+  didn't stay buried: in a 17-file project the bare model reads every file first.
 - **The baseline has no helper library.** "No skill" also means no `cq_helpers`, so the
   comparison is skill plus helpers against the bare model in the same venv.
-- **Headless runs cannot ask questions.** Both arms were told to write questions and assumed
+- **Headless runs can't ask questions.** Both arms were told to write questions and assumed
   answers to `QUESTIONS.md` and carry on, so the confirm-before-building gates are graded on
   what was written down, not on a real conversation.
 - **The memory cap needs the runner.** It covers what `run_watchdogged.ps1` launches. Without the
-  hook, using the runner is an instruction, and the evals caught one skill run starting CadQuery
+  hook, using the runner is an instruction, and the evals caught skill runs starting Python
   outside it; with the hook registered, Claude Code refuses those calls. The hook is a guard
   against forgetting, not a security boundary: it reads command text with patterns, so a
   determined workaround (a script that launches Python itself, a variable built up in pieces) can
-  still get past it, and commands Claude does not send through its Bash or PowerShell tools are
+  still get past it, and commands Claude doesn't send through its Bash or PowerShell tools are
   outside its reach.
 - **CI skips the render group.** GitHub's Windows runners have no OpenGL 3.2, which VTK's
   offscreen renderer needs (`CADPARTS_SKIP_RENDER=1`); every local install runs it.
@@ -406,7 +416,7 @@ touched outside its own folder.
 | Computational geometry: B-rep validity, mesh repair, float32 snapping, layer-sliced island detection | `venv-modules/cq_helpers.py` |
 | CAD automation with CadQuery / OpenCASCADE | `SKILL.md`, `cq_helpers.py`, `references/gotchas.md` |
 | AI agent design: skill authoring, hard gates, a failure-mode catalog built from real breaks | `SKILL.md`, `references/` |
-| Evaluation design: isolated A/B runs, sandboxed agents, scripted grading | `evals/harness/` |
+| Evaluation design: isolated A/B runs, sandboxed agents, scripted grading, repeated runs on the key result | `evals/harness/` |
 | CI that tests the documented install on a clean machine | `.github/workflows/selftest.yml` |
 
 ## License and credits
@@ -414,9 +424,9 @@ touched outside its own folder.
 Apache License 2.0; see [LICENSE](LICENSE) and [NOTICE](NOTICE). Copyright 2026 Colin Ezra
 Wilder.
 
-Built with [Claude Code](https://claude.com/claude-code). The skill, its helpers and the eval
-harness were written in collaboration with Claude (Anthropic), and every rule in them comes from
-a real part that failed on a real printer.
+Built with [Claude Code](https://claude.com/claude-code). I wrote the skill, its helpers and the
+eval harness in collaboration with Claude (Anthropic), and every rule in them comes from a real
+part that failed on a real printer.
 
 The reference-image decomposition procedure is adapted from the vision-decompose skill in
 Reshef Elisha's [jarvis-onshape-mcp](https://github.com/ReshefElisha/jarvis-onshape-mcp) (MIT),

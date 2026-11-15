@@ -324,6 +324,13 @@ the guard from the old and new meshes and assert the rest is identical.
   dimensions; emit deliberately-undersized variants only as labeled
   compensation experiments (e.g. `_b2.4`), and prefer slicer knobs for tuning.
 - **Say which hand** (Script conventions). A bare "left" is a defect.
+- **Probe narrowly.** A question about a few features gets a probe that loads
+  only what touches them: import the part's STEP, crop a box around the
+  region, and test only the hardware within a few mm of it. Building a whole
+  assembly and intersecting every part against a large body takes minutes (one
+  hole-placement probe on a 446-face robot tub took 474 s). Full-assembly
+  builds are for the final fit check. If a probe will need more than about a
+  minute, narrow it before running it.
 
 ## Environment facts
 
