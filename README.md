@@ -198,6 +198,7 @@ The three parts pictured at the top took 17 recorded print outcomes from July to
 | 10-27 | a wedge coupon that tests roller spacing without a whole wheel | "did great", and picked the final spacing |
 | 10-27 | the final ten-spoke wheels, left and right | "perfect" |
 | 10-28 | the same wheels with engraved L/R marks | one wheel struggles to turn; cause not established |
+| 10-29 | the stiff marked wheel, checked again | the wheel was fine: its two halves were assembled one turn out of line; re-clocked, it turns freely |
 
 The adapter's ear ladder is published in full in [examples/n20-ear-ladder](examples/n20-ear-ladder):
 the frozen script, its falsifiable prediction, every rung's STEP, STL and render, and a rebuild that
