@@ -1,5 +1,6 @@
 # Runs a list of evals, at most -Parallel at a time, each in its own pwsh running run_eval.ps1.
 #   pwsh -File run_batch.ps1 -Jobs fable52-high:baseline:1,fable52-high:baseline:2 -Parallel 3
+#   a fourth field repeats a cell: fable52-high:skill:10:2 writes eval-10-r2
 param(
     [Parameter(Mandatory = $true)][string[]]$Jobs,
     [int]$Parallel = 3,
@@ -16,9 +17,11 @@ $t0 = Get-Date
 while ($queue.Count -or $running.Count) {
     while ($queue.Count -and $running.Count -lt $Parallel) {
         $j = $queue.Dequeue()
-        $c, $a, $e = $j -split ':'
-        $out = Join-Path $logDir "$c.$a.eval-$e.harness.txt"
-        $p = Start-Process -FilePath $pwsh -ArgumentList @('-NoProfile', '-File', $runner, '-Config', $c, '-Arm', $a, '-EvalId', $e, '-BudgetUsd', "$BudgetUsd") `
+        $c, $a, $e, $rep = $j -split ':'          # config:arm:eval[:repeat]
+        if (-not $rep) { $rep = '1' }
+        $cell = if ([int]$rep -gt 1) { "eval-$e-r$rep" } else { "eval-$e" }
+        $out = Join-Path $logDir "$c.$a.$cell.harness.txt"
+        $p = Start-Process -FilePath $pwsh -ArgumentList @('-NoProfile', '-File', $runner, '-Config', $c, '-Arm', $a, '-EvalId', $e, '-Rep', $rep, '-BudgetUsd', "$BudgetUsd") `
             -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden -PassThru
         if (-not $p) {   # a failed launch must not sit in $running forever
             Write-Host ("{0:HH:mm:ss} FAILED to start {1}" -f (Get-Date), $j)

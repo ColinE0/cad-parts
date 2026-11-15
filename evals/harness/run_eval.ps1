@@ -20,6 +20,7 @@ param(
     [Parameter(Mandatory = $true)][ValidateSet('fable51-medium', 'fable52-high')][string]$Config,
     [Parameter(Mandatory = $true)][ValidateSet('skill', 'baseline')][string]$Arm,
     [Parameter(Mandatory = $true)][int]$EvalId,
+    [int]$Rep = 1,      # repeat number; 2 and up write eval-<id>-r<rep> so earlier runs stay put
     [string]$Root = (Split-Path -Parent $PSScriptRoot),
     [int]$TimeoutMin = 45,
     [double]$MaxRamGB = 12,
@@ -47,9 +48,10 @@ $specDir = if (Test-Path (Join-Path $Root 'spec\evals.json')) { Join-Path $Root 
 $skillDir = Join-Path $Root 'skill-under-test\cad-parts'
 $venvDir = Join-Path $Root 'venv'
 $venvPy = Join-Path $venvDir 'Scripts\python.exe'
-$runDir = Join-Path $Root "runs\$Config\$Arm\eval-$EvalId"
+$cell = if ($Rep -gt 1) { "eval-$EvalId-r$Rep" } else { "eval-$EvalId" }
+$runDir = Join-Path $Root "runs\$Config\$Arm\$cell"
 $logDir = Join-Path $Root 'logs'
-$tag = "$Config.$Arm.eval-$EvalId"
+$tag = "$Config.$Arm.$cell"
 $logBase = Join-Path $logDir $tag
 
 $spec = Get-Content (Join-Path $specDir 'evals.json') -Raw | ConvertFrom-Json

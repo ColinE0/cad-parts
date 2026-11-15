@@ -5,7 +5,7 @@
 [![Built with Claude Code](https://img.shields.io/badge/built%20with-Claude%20Code-D97757)](https://claude.com/claude-code)
 ![Platform: Windows](https://img.shields.io/badge/platform-Windows%2010%2F11-lightgrey)
 
-A Claude Code skill for designing 3D-printable parts with CadQuery. You ask for a part in plain
+A Claude Code skill (Windows) for designing 3D-printable parts with CadQuery. You ask for a part in plain
 words ("an M4 spacer, 12 mm tall, 9 mm OD") or hand over a drawing, and you get back an STL and a
 STEP that were measured and checked before you see them. Builds go through a memory-capped runner
 (a hook can make that a rule). Every STL has to pass a watertight check and agree with its STEP.
@@ -22,8 +22,24 @@ edited in place. None of that proves a part will fit or print well: the
 Three parts from a small robot's mecanum wheels, all printed and fitted. Getting there took 17
 recorded print outcomes; [the story](#example-the-wheels) is below.
 
+## Quickstart
+
+With [Claude Code](https://claude.com/claude-code), git and [uv](https://docs.astral.sh/uv/)
+installed:
+
+```powershell
+git clone https://github.com/ColinE0/cad-parts
+cd cad-parts
+powershell -ExecutionPolicy Bypass -File .\setup\install.ps1
+```
+
+Restart Claude Code and ask for a part: "an M4 spacer, 12 mm tall, 9 mm OD". You get a folder with
+the CadQuery script, a STEP, a checked STL, a 6-view render and a README naming the file to print.
+Details, updates and the optional hook are under [Install](#install).
+
 ## Contents
 
+- [Quickstart](#quickstart)
 - [Why this exists](#why-this-exists)
 - [What it does](#what-it-does)
 - [Results](#results)
@@ -46,7 +62,7 @@ those failures on real parts:
 
 | What goes wrong | What the skill does about it |
 |---|---|
-| A CAD job inside a long-running process ran away with memory and took the whole machine down. | Every script runs in a Windows job object with a kernel-enforced memory cap and a timeout over the whole process tree. A runaway loses one run, not the machine. |
+| A CAD job inside a long-running process ran away with memory and took the whole machine down. | Scripts run through a runner that puts them in a Windows job object, with a kernel-enforced memory cap and a timeout over the whole process tree. A runaway loses one run, not the machine. Using the runner is the skill's rule; the optional hook makes Claude Code refuse to skip it. |
 | A B-rep that passes `isValid()` still exports an STL the slicer calls non-manifold. | `export_checked` gates every export: valid solid, watertight and consistently wound STL, gentle auto-repair only when the volume moves less than 0.5 %, and an STL that matches the STEP read back from disk in size and volume. |
 | Dimensions get "verified" by asserting an input constant against itself. | Features are checked by measuring the built solid, and a 6-view render is read before anything is reported. |
 | The model edits the script for a part that already printed and fit, and the working version is gone. | Every script carries a `STATUS:` line. FROZEN parts are never edited; variants get a new file that names its delta. |
@@ -70,7 +86,24 @@ those failures on real parts:
 ## Results
 
 Eleven eval prompts, 30 headless Claude Code runs on 2026-11-14, one run per cell (full
-write-up in [evals/RESULTS.md](evals/RESULTS.md)).
+write-up in [evals/RESULTS.md](evals/RESULTS.md)). The buried evals come first: they are where
+the skill changed the outcome. In the others, both setups mostly got the part right.
+
+**Three buried ones.** The original failures happened deep in real projects, so these bury the
+same two the way they happened: a slot asked for in a 230 mm robot shell with a dozen features,
+which quietly takes the whole foot of the wall between the wheel arches; a small edit to a part
+in a 17-file project whose shared helper still loads an old plate; and the last of four routine
+edits, where bigger wheel arches leave that same wall hanging. No prompt names the problem.
+Fable 5.2 high only (the 5.1 medium arm was not run).
+
+| | Fable 5.2 high + skill | Fable 5.2 high, no skill |
+|---|---|---|
+| Hanging wall seen (2 evals) | 2/2, measured with `islands()` | 2/2, reasoned about |
+| Delivered shell free of islands, measured | 2/2: wall cut away (and asked), or breakaway print posts | 0/2: shipped on supports both times |
+| Stale plate caught; part fits the live plate | yes | yes |
+| CadQuery processes run with no memory cap | 0 | 14 |
+| Renders made and opened | 13/14 | 0 |
+| Tokens / cost at API list prices, all three | 4.44 M / $12.93 | 1.59 M / $6.02 |
 
 **The first six:** a spacer from a spec, a variant of a frozen part, a broken STL, a bracket on a
 chained plate, a bracket from a drawing, and a build the memory cap keeps killing.
@@ -100,22 +133,6 @@ past.
 | Tokens / cost at API list prices, both | 1.19 M / $3.17 | 1.09 M / $3.60 | 0.33 M / $1.24 |
 
 ![Eval 8's sled bridge: a tunnel cut that clears the sled leaves the centre post hanging 10 mm above the bed; islands() rates it HIGH, and the grounded fix reads clean](docs/island-check.png)
-
-**Three buried ones.** The original failures happened deep in real projects, so these bury the
-same two the way they happened: a slot asked for in a 230 mm robot shell with a dozen features,
-which quietly takes the whole foot of the wall between the wheel arches; a small edit to a part
-in a 17-file project whose shared helper still loads an old plate; and the last of four routine
-edits, where bigger wheel arches leave that same wall hanging. No prompt names the problem.
-Fable 5.2 high only (the 5.1 medium arm was not run).
-
-| | Fable 5.2 high + skill | Fable 5.2 high, no skill |
-|---|---|---|
-| Hanging wall seen (2 evals) | 2/2, measured with `islands()` | 2/2, reasoned about |
-| Delivered shell free of islands, measured | 2/2: wall cut away (and asked), or breakaway print posts | 0/2: shipped on supports both times |
-| Stale plate caught; part fits the live plate | yes | yes |
-| CadQuery processes run with no memory cap | 0 | 14 |
-| Renders made and opened | 13/14 | 0 |
-| Tokens / cost at API list prices, all three | 4.44 M / $12.93 | 1.59 M / $6.02 |
 
 The honest reading: on small parts in short prompts, a current model gets the geometry right on
 its own and spots both rebuilt failures. The skill does not make it smarter there; it makes the
