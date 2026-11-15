@@ -119,4 +119,6 @@ if ($LASTEXITCODE -ne 0) { Write-Host "`nSELF-TEST FAILED (exit $LASTEXITCODE). 
 if ($VenvPath -ne 'C:\cadquery-venv') {
     Write-Host "`nThe venv is not at the default C:\cadquery-venv: set CADPARTS_PYTHON to $py so the runner finds it." -ForegroundColor Yellow
 }
+Write-Host "`nRecommended: register $dest\hooks\require_runner.py as a Claude Code hook so the runner"
+Write-Host 'becomes a rule (README, "Making the runner a rule").'
 Write-Host "`nAll set (cad-parts $version). Restart Claude Code, then ask it for a part (or type /cad-parts)." -ForegroundColor Green

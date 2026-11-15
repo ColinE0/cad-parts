@@ -181,7 +181,9 @@ Windows 10 or 11, about 10 minutes, once.
    skill and its helpers together and keeps the old folder in
    `%USERPROFILE%\.claude\cad-parts-backups`. For a venv somewhere else, pass `-VenvPath` and
    set `CADPARTS_PYTHON` to its `python.exe`.
-4. Restart Claude Code.
+4. Recommended: register the hook that makes the runner a rule (see
+   [Making the runner a rule](#making-the-runner-a-rule)).
+5. Restart Claude Code.
 
 ## Use
 
@@ -216,6 +218,38 @@ it spawns are born inside the job. An allocation past the cap is refused by the 
 runner kills the tree with `TerminateJobObject`, and if the runner itself dies the job takes the
 tree with it. It compiles its C# with Windows PowerShell 5.1 too. Every build starts without
 `PYTHONOPTIMIZE`, so a part script's own asserts always run.
+
+### Making the runner a rule
+
+The runner caps only what it launches, and the skill tells Claude to launch everything through
+it. `cad-parts/hooks/require_runner.py` turns that instruction into a rule: registered as a Claude
+Code hook, it reads every command Claude sends to its Bash or PowerShell tool and refuses one that
+starts the venv's Python directly, with the runner command to use instead. `-m pip`, `--version`
+and commands that only name the venv path (copying a file into it, listing it) still go through.
+Add it to `%USERPROFILE%\.claude\settings.json`, merging with any hooks you already have:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "\"C:/cadquery-venv/Scripts/python.exe\" -I \"C:/Users/<you>/.claude/skills/cad-parts/hooks/require_runner.py\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+It is plain Python with no imports beyond the standard library, about 0.15 s per shell command.
+`hooks/test_require_runner.py` checks 13 commands it must refuse and 12 it must let through; CI
+runs it on every push.
 
 **The export gate.** `export_checked` requires a valid B-rep, writes the STEP, meshes a copy of
 the shape (so the caller's solid is never meshed in place), and reloads the STL with trimesh:
@@ -254,6 +288,7 @@ covers all of it with plain asserts.
 | `cad-parts/SKILL.md` | the skill: non-negotiables, workflow, conventions, helper API |
 | `cad-parts/references/` | `gotchas.md` (traps already hit) and the reference-image decomposition procedure |
 | `cad-parts/scripts/run_watchdogged.ps1` | the memory-capped runner |
+| `cad-parts/hooks/` | `require_runner.py`, the optional Claude Code hook that refuses the venv's Python outside the runner, and its test |
 | `cad-parts/scripts/test_cq_helpers.py` | self-test for the helpers (11 groups, ends with `DONE`) |
 | `cad-parts/venv-modules/cq_helpers.py` | export gate, renders, islands, interference, chain pointer |
 | `setup/` | `install.ps1` and the pinned `requirements.txt` |
@@ -302,6 +337,10 @@ touched outside its own folder.
 - **Headless runs cannot ask questions.** Both arms were told to write questions and assumed
   answers to `QUESTIONS.md` and carry on, so the confirm-before-building gates are graded on
   what was written down, not on a real conversation.
+- **The memory cap needs the runner.** It covers what `run_watchdogged.ps1` launches. Without the
+  hook, using the runner is an instruction, and the evals caught one skill run starting CadQuery
+  outside it; with the hook registered, Claude Code refuses those calls. Commands Claude does
+  not send through its Bash or PowerShell tools are outside the hook's reach.
 - **CI skips the render group.** GitHub's Windows runners have no OpenGL 3.2, which VTK's
   offscreen renderer needs (`CADPARTS_SKIP_RENDER=1`); every local install runs it.
 

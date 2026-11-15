@@ -20,6 +20,9 @@ prints the results on FDM printers, so every STL that leaves here must slice cle
    gotchas). A crashed subprocess loses one run; a crashed in-process op takes
    the box down. Run every build through `scripts/run_watchdogged.ps1`, and
    every other venv script too (drawing probes, mesh checks), CadQuery or not.
+   When `hooks/require_runner.py` is registered as a Claude Code hook (README),
+   a direct call to the venv's Python is refused with the runner command to use
+   instead: that refusal is the rule working, not an error to route around.
 2. **Never edit a proven part file.** A script whose print has been tested and
    works is frozen. Variants get a NEW file (e.g. `adapter_hex_trim.py` next to
    `adapter_hex.py`) with a docstring naming exactly what changed and why. Every

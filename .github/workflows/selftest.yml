@@ -29,3 +29,10 @@ jobs:
       - name: Run it again (a matching install must be left as it is and pass again)
         shell: pwsh
         run: powershell -ExecutionPolicy Bypass -File .\setup\install.ps1
+
+      - name: Test the runner hook (commands it must refuse and commands it must let through)
+        shell: pwsh
+        run: |
+          & "$env:USERPROFILE\.claude\skills\cad-parts\scripts\run_watchdogged.ps1" `
+            -Script "$env:USERPROFILE\.claude\skills\cad-parts\hooks\test_require_runner.py" `
+            -Python C:\cadquery-venv\Scripts\python.exe
