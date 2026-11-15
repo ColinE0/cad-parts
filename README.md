@@ -11,6 +11,10 @@ STEP that you can trust. Every build runs in a memory-capped subprocess. Every S
 watertight before it leaves. Every part is rendered and actually looked at. A part that already
 printed and fit is never edited in place.
 
+> **Windows 10/11 only for now.** The memory cap is a Windows job object driven from PowerShell.
+> macOS and Linux would need the same idea built on cgroups or `setrlimit`, which is not written
+> yet (see [Limitations](#limitations)). The rest of the skill is plain CadQuery and Python.
+
 ![Eval 8's sled bridge: a tunnel cut that clears the sled leaves the centre post hanging 10 mm above the bed; islands() rates it HIGH, and the grounded fix reads clean](docs/island-check.png)
 
 ## Contents
@@ -60,8 +64,8 @@ those failures on real parts:
 
 ## Results
 
-Eight eval prompts, three setups, 24 headless Claude Code runs on 2026-11-14, one run per cell
-(full write-up in [evals/RESULTS.md](evals/RESULTS.md)).
+Eleven eval prompts, 30 headless Claude Code runs on 2026-11-14, one run per cell (full
+write-up in [evals/RESULTS.md](evals/RESULTS.md)).
 
 **The first six:** a spacer from a spec, a variant of a frozen part, a broken STL, a bracket on a
 chained plate, a bracket from a drawing, and a build the memory cap keeps killing.
@@ -90,20 +94,35 @@ past.
 | STL checked watertight / render made and opened | 2/2, 2/2 | 2/2, 2/2 | 1/2, 0/2 |
 | Tokens / cost at API list prices, both | 1.19 M / $3.17 | 1.09 M / $3.60 | 0.33 M / $1.24 |
 
-The honest reading: on small parts, a current model gets the geometry right on its own, and in a
-short prompt about a small part it also spots the two failures the harder evals rebuild. The
-skill does not make it smarter there; it makes the work safe and checkable. It measures what the
-bare model reasons about, keeps CAD processes behind the memory cap (one slip in 16 skill runs:
-a bare `python -c` that imported the helpers to read their signatures), gets the memory kill
-right instead of "raise the limit", and pins a dependent part to its parent so the next change
-fails loudly instead of passing quietly. It costs two to four times the tokens. The original
-failures happened deep in long sessions on large parts. Three evals bury them that deep (a large
-shell, a project with a deep plate chain, a four-item punch list), run with Fable 5.2 high with and
-without the skill. Both arms found the stale plate. In both island evals both arms saw the hanging
-wall, but only the skill runs measured it and delivered parts with no islands; the bare model
-shipped the wall on supports both times, which is the call that broke the original print.
-A ninth prompt, a non-uniform scale of an imported STEP, is built but was not run: replayed under
-the runner, the op once blamed for a machine crash finished in 0.24 s with no extra memory.
+**Three buried ones.** The original failures happened deep in real projects, so these bury the
+same two the way they happened: a slot asked for in a 230 mm robot shell with a dozen features,
+which quietly takes the whole foot of the wall between the wheel arches; a small edit to a part
+in a 17-file project whose shared helper still loads an old plate; and the last of four routine
+edits, where bigger wheel arches leave that same wall hanging. No prompt names the problem.
+Fable 5.2 high only (the 5.1 medium arm was not run).
+
+| | Fable 5.2 high + skill | Fable 5.2 high, no skill |
+|---|---|---|
+| Hanging wall seen (2 evals) | 2/2, measured with `islands()` | 2/2, reasoned about |
+| Delivered shell free of islands, measured | 2/2: wall cut away (and asked), or breakaway print posts | 0/2: shipped on supports both times |
+| Stale plate caught; part fits the live plate | yes | yes |
+| CadQuery processes run with no memory cap | 0 | 14 |
+| Renders made and opened | 13/14 | 0 |
+| Tokens / cost at API list prices, all three | 4.44 M / $12.93 | 1.59 M / $6.02 |
+
+The honest reading: on small parts in short prompts, a current model gets the geometry right on
+its own and spots both rebuilt failures. The skill does not make it smarter there; it makes the
+work safe and checkable. It measures what the bare model reasons about, keeps CAD processes
+behind the memory cap (one slip in 19 skill runs: a bare `python -c` that imported the helpers to
+read their signatures), gets the memory kill right instead of "raise the limit", and pins a
+dependent part to its parent so the next change fails loudly instead of passing quietly. Buried
+deep, the difference shows up in the outcome: the same model saw the same hanging wall in both
+arms, but without the skill it called it a support setting and shipped it, which is exactly the
+call that snapped a real 22-hour print. With the skill it refused to and delivered a printable
+part. Both arms found the stale plate, since the bare model read all 17 files first. The skill
+costs two to four times the tokens. A twelfth prompt, a non-uniform scale of an imported STEP, is
+built but was not run: replayed under the runner, the op once blamed for a machine crash finished
+in 0.24 s with no extra memory.
 
 ## Physical record
 
@@ -329,10 +348,11 @@ touched outside its own folder.
   would need the same idea through cgroups or `setrlimit`; not written yet.
 - **CadQuery / OpenCASCADE only**, and the defaults lean FDM and PLA (fastener clearances, the
   island risk thresholds).
-- **Eight evals run, one run per configuration.** Model output varies run to run, so each cell in
-  the results is one sample, not a rate. The two harder evals rebuild their failures on small
+- **Eleven evals run, one run per configuration.** Model output varies run to run, so each cell
+  in the results is one sample, not a rate. The two harder evals rebuild their failures on small
   parts in short prompts, where the bare model catches them too; evals 10 to 12 bury them deeper,
-  and ran in the two Fable 5.2 arms only.
+  and ran in the two Fable 5.2 arms only. The buried plate drift did not stay buried: in a
+  17-file project the bare model reads every file first.
 - **The baseline has no helper library.** "No skill" also means no `cq_helpers`, so the
   comparison is skill plus helpers against the bare model in the same venv.
 - **Headless runs cannot ask questions.** Both arms were told to write questions and assumed
