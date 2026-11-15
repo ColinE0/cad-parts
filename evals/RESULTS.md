@@ -316,7 +316,42 @@ was written after, buried the way it happened, and the difference this batch was
 It cost about 2.8 times the tokens and 2.1 times the money: 4.44 M tokens and $12.93 for the three
 skill runs against 1.59 M and $6.02 without. On the drift both arms were right.
 
-One run per eval and arm: each cell is one sample, not a rate.
+One run per eval and arm: each cell is one sample, not a rate. The two island evals were then
+repeated; see below.
+
+### Repeats: evals 10 and 12, three runs per arm
+
+The island result is the one the batch rests on, and at one run per cell it could have been luck.
+On 2026-11-15 evals 10 and 12 ran twice more in each arm (same model and effort, same spec, venv
+and skill copy 1.1.0, same harness with a repeat number added: `run_eval.ps1 -Rep`, folders
+`eval-<id>-r<n>`). Graded by the same `grade.py` (now repeat-aware); each delivered shell was also
+read by hand against the run's own hand-over.
+
+| Run | No skill: shell delivered | Skill: shell recommended to print |
+|---|---|---|
+| 10, r1 (batch 3) | 2 HIGH islands, "it needs support under it" | v7.2: wall cut away to the arch crowns, 0 islands, tray and tyres clear |
+| 10, r2 | 2 HIGH, 19.2 mm tall: "the slot roof and the four tooth tips need support" | v7.2: a 0.8 mm knock-out web left in each slot, 0 islands; cut the webs out after printing and it is v7.1 exactly. v7.1 (the slot as asked) delivered too, marked not cleared to print |
+| 10, r3 | 2 HIGH, 12.0 mm tall: "Assumed: yes, print v8 with support" | v7.2: 0 islands, tray and tyres clear (its tie beams bridge 18.6 mm, said) |
+| 12, r1 (batch 3) | 2 HIGH: "v4 needs supports" | v3_1 with four breakaway print posts, 0 islands |
+| 12, r2 | 2 HIGH, 14.0 mm tall: "the shell now needs supports" | v3_1 with print props in the dock slot, cut off after printing: 0 islands as printed |
+| 12, r3 | 2 HIGH, 14.0 mm tall: "Check your slicer preview shows support" | v3_1 with print ties (`PRINT_TIES`), 0 islands as printed; it names slicer supports as the option it would not take |
+
+Totals over both evals, three runs each:
+
+| | Skill | No skill |
+|---|---|---|
+| Hanging wall seen | 6/6, measured with `islands()` | 6/6, in its own words |
+| Shell recommended to print free of islands, measured | 6/6 | 0/6 |
+| CadQuery processes run with no memory cap | 1 | 71 |
+| Runs that made a render | 6/6 | 3/6 |
+| Cost at API list prices, six runs | $30.46 | $16.43 |
+
+Every run in both arms saw the problem; the arms differ in what they did about it, every time.
+For the grader: a skill run's "as fitted" or "props cut off" STEP reads 2 HIGH islands by design
+(it is the part after the print aids are removed); the printed STEP is the one counted. The one
+uncapped process in the skill arm (10 r3) is the same slip batch 1 saw, `python -c "import
+cq_helpers"` to read the helpers; the 1.2.0 runner hook refuses that command. Six runs per arm is
+still a small sample, but 6/6 against 0/6 is no longer one coin flip.
 
 ## Grading notes
 

@@ -699,9 +699,10 @@ def transcript(tag, run):
     return facts
 
 
-def grade_run(cfg, arm, eid):
-    run = RUNS / cfg / arm / f"eval-{eid}"
-    tag = f"{cfg}.{arm}.eval-{eid}"
+def grade_run(cfg, arm, eid, cell=None):
+    cell = cell or f"eval-{eid}"
+    run = RUNS / cfg / arm / cell
+    tag = f"{cfg}.{arm}.{cell}"
     ev = EVALS[eid]
     ins = input_files(ev)
     same = {f.lower(): (run / f).exists() and sha(run / f) == sha(SPEC / f) for f in ins}
@@ -782,17 +783,18 @@ def main():
     for cfg_dir in sorted(RUNS.iterdir()):
         for arm_dir in sorted(cfg_dir.iterdir()):
             for ev_dir in sorted(arm_dir.iterdir()):
-                cfg, arm, eid = cfg_dir.name, arm_dir.name, int(ev_dir.name.split("-")[1])
-                if want and cfg not in want and arm not in want:
+                cfg, arm, eid, cell = cfg_dir.name, arm_dir.name, int(ev_dir.name.split("-")[1]), ev_dir.name
+                if want and not any(w in (cfg, arm, cell) or cell.endswith(w) for w in want):
                     continue
-                if not (LOGS / f"{cfg}.{arm}.eval-{eid}.status.json").exists():
-                    print(f"skip {cfg}/{arm}/eval-{eid}: not finished", flush=True)
+                if not (LOGS / f"{cfg}.{arm}.{cell}.status.json").exists():
+                    print(f"skip {cfg}/{arm}/{cell}: not finished", flush=True)
                     continue
-                g = grade_run(cfg, arm, eid)
+                g = grade_run(cfg, arm, eid, cell)
+                g["cell"] = cell
                 out.append(g)
                 t = g["transcript"]
                 r = t["result"] or {}
-                print(f"== {cfg} {arm} eval-{eid}: stl_match={g['stl_match']} step_match={g['step_match']} "
+                print(f"== {cfg} {arm} {cell}: stl_match={g['stl_match']} step_match={g['step_match']} "
                       f"inputs_unchanged={g['inputs_unchanged']} png={len(g['png'])} read_png={t['read_pngs']} "
                       f"runner={t['runner_runs']} uncapped_cad={t['uncapped_cad_runs']} read_skill={t['read_skill']} "
                       f"Q={g['questions_md']} decomp={g['decomposition_md']} turns={r.get('num_turns')} "
@@ -849,7 +851,7 @@ def main():
                     for kind, recs in s12["candidates"].items():
                         for c in recs:
                             print(f"     {kind}:", json.dumps({k: v for k, v in c.items() if k != "mtime"}), flush=True)
-    (ROOT / "grades.json").write_text(json.dumps(out, indent=1), encoding="utf-8")
+    (ROOT / ("grades-repeats.json" if want else "grades.json")).write_text(json.dumps(out, indent=1), encoding="utf-8")
     print("DONE", flush=True)
 
 

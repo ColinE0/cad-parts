@@ -85,9 +85,10 @@ those failures on real parts:
 
 ## Results
 
-Eleven eval prompts, 30 headless Claude Code runs on 2026-11-14, one run per cell (full
-write-up in [evals/RESULTS.md](evals/RESULTS.md)). The buried evals come first: they are where
-the skill changed the outcome. In the others, both setups mostly got the part right.
+Eleven eval prompts, 38 headless Claude Code runs on 2026-11-14 and 15: one run per cell, except
+the two buried island evals, which ran three times per setup (full write-up in
+[evals/RESULTS.md](evals/RESULTS.md)). The buried evals come first: they are where the skill
+changed the outcome. In the others, both setups mostly got the part right.
 
 **Three buried ones.** The original failures happened deep in real projects, so these bury the
 same two the way they happened: a slot asked for in a 230 mm robot shell with a dozen features,
@@ -98,12 +99,12 @@ Fable 5.2 high only (the 5.1 medium arm was not run).
 
 | | Fable 5.2 high + skill | Fable 5.2 high, no skill |
 |---|---|---|
-| Hanging wall seen (2 evals) | 2/2, measured with `islands()` | 2/2, reasoned about |
-| Delivered shell free of islands, measured | 2/2: wall cut away (and asked), or breakaway print posts | 0/2: shipped on supports both times |
-| Stale plate caught; part fits the live plate | yes | yes |
-| CadQuery processes run with no memory cap | 0 | 14 |
-| Renders made and opened | 13/14 | 0 |
-| Tokens / cost at API list prices, all three | 4.44 M / $12.93 | 1.59 M / $6.02 |
+| Hanging wall seen (2 evals x 3 runs) | 6/6, measured with `islands()` | 6/6, reasoned about |
+| Shell recommended to print free of islands, measured | 6/6: wall cut away, knock-out webs, or breakaway posts and ties | 0/6: shipped on supports every time |
+| Stale plate caught; part fits the live plate (1 run) | yes | yes |
+| CadQuery processes run with no memory cap (all 7 runs) | 1 | 73 |
+| Runs that made a render (all 7) | 7/7 | 3/7 |
+| Cost at API list prices, all 7 runs | $32.85 | $17.92 |
 
 **The first six:** a spacer from a spec, a variant of a frozen part, a broken STL, a bracket on a
 chained plate, a bracket from a drawing, and a build the memory cap keeps killing.
@@ -137,13 +138,13 @@ past.
 The honest reading: on small parts in short prompts, a current model gets the geometry right on
 its own and spots both rebuilt failures. The skill does not make it smarter there; it makes the
 work safe and checkable. It measures what the bare model reasons about, keeps CAD processes
-behind the memory cap (one slip in 19 skill runs: a bare `python -c` that imported the helpers to
-read their signatures), gets the memory kill right instead of "raise the limit", and pins a
-dependent part to its parent so the next change fails loudly instead of passing quietly. Buried
-deep, the difference shows up in the outcome: the same model saw the same hanging wall in both
-arms, but without the skill it called it a support setting and shipped it, which is exactly the
-call that snapped a real 22-hour print. With the skill it refused to and delivered a printable
-part. Both arms found the stale plate, since the bare model read all 17 files first. The skill
+behind the memory cap (two slips in 23 skill runs, both a bare `python -c` that imported the
+helpers to read their signatures; the hook now refuses that), gets the memory kill right instead
+of "raise the limit", and pins a dependent part to its parent so the next change fails loudly
+instead of passing quietly. Buried deep, the difference shows up in the outcome: in six runs per
+setup the same model saw the same hanging wall every time, but without the skill it called it a
+support setting and shipped it all six times, which is exactly the call that snapped a real
+22-hour print. With the skill it refused all six times and recommended a printable part. Both arms found the stale plate, since the bare model read all 17 files first. The skill
 costs two to four times the tokens. A twelfth prompt, a non-uniform scale of an imported STEP, is
 built but was not run: replayed under the runner, the op once blamed for a machine crash finished
 in 0.24 s with no extra memory.
@@ -376,8 +377,9 @@ touched outside its own folder.
   would need the same idea through cgroups or `setrlimit`; not written yet.
 - **CadQuery / OpenCASCADE only**, and the defaults lean FDM and PLA (fastener clearances, the
   island risk thresholds).
-- **Eleven evals run, one run per configuration.** Model output varies run to run, so each cell
-  in the results is one sample, not a rate. The two harder evals rebuild their failures on small
+- **Eleven evals run, mostly one run per configuration.** Model output varies run to run, so most
+  cells in the results are one sample, not a rate; only the two buried island evals ran three
+  times per setup (6/6 against 0/6), and that is still a small sample. The two harder evals rebuild their failures on small
   parts in short prompts, where the bare model catches them too; evals 10 to 12 bury them deeper,
   and ran in the two Fable 5.2 arms only. The buried plate drift did not stay buried: in a
   17-file project the bare model reads every file first.
