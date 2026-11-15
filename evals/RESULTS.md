@@ -9,8 +9,8 @@ Three batches on the same day. Batches 1 and 2 ran in the same three arms, one r
 Batch 1 ran the six original prompts (evals 1 to 6). Batch 2 ran two harder prompts rebuilt from
 failures the skill was written after (evals 8 and 9). A third hard prompt, eval 7, is built but
 was not run; see [Eval 7: built, not run](#eval-7-built-not-run). Batch 3 (evals 10 to 12) buries
-batch 2's two failures the way the originals were buried; so far only its no-skill arm has run;
-see [Batch 3](#batch-3-evals-10-to-12-no-skill-arm).
+batch 2's two failures the way the originals were buried; it ran in two arms, Fable 5.2 high with
+and without the skill (5.1 medium not run); see [Batch 3](#batch-3-evals-10-to-12).
 
 Every run was headless Claude Code 2.1.325 (`claude -p --safe-mode`, no session persistence, web
 tools off) in its own fresh folder, inside a job object with a 12 GB cap. The user prompt was the
@@ -175,11 +175,11 @@ three to four times the tokens (under three times the cost) and over twice the w
 A harder test of the claim would bury the same failures the way the originals were buried: a
 larger part, a deeper chain, or the failure met late in a long session.
 
-## Batch 3: evals 10 to 12, no-skill arm
+## Batch 3: evals 10 to 12
 
 The same two failures, buried the way the originals were. Each eval hands the run a folder: a part
-folder or a whole project. Only the no-skill arm has run so far
-([below](#no-skill-arm)); the skill arms have not.
+folder or a whole project. Two arms ran, Fable 5.2 high [without](#no-skill-arm) and
+[with](#skill-arm-fable-52-high) the skill; the Fable 5.1 medium arm did not run.
 
 | # | Prompt, abridged (verbatim in `evals.json`) | How the failure is buried |
 |---|---|---|
@@ -264,14 +264,59 @@ named it, and then treated it as a print setting and shipped the part on support
 call that broke the original print: on 2026-10-09 the print plan listed the tunnel tops as
 expected support, and the pillar standing on them snapped partway through. It is also the call
 the skill's fourth non-negotiable rules out: "a HIGH island is a design problem to fix or put to
-the user before any print plan, never 'supports will handle it'". Whether the skill arms do
-better here is not measured yet.
+the user before any print plan, never 'supports will handle it'".
 
 Burying the drift did not work. In a 17-file project the bare model reads every file before it
 starts, so the stale pin is never more than one read away. A harder version needs a project too
 big to read whole, or the pin met late in a long session.
 
-One run per eval: each cell is one sample, not a rate.
+### Skill arm (Fable 5.2 high)
+
+Same model and effort, with the skill (1.1.0, repo commit 8de44d8), per-run budget $15:
+
+| | Eval 10, shell slot | Eval 11, plate chain | Eval 12, punch list |
+|---|---|---|---|
+| Planted problem found by measuring it | yes: `islands()`, 2 HIGH, 19.2 mm | yes: plate checked against 10c | yes: `islands()`, 2 HIGH, 18.4 mm |
+| Delivered part, measured | slot version held back as "not cleared to print"; the recommended version (wall cut away to the arch crowns) has 0 islands, tray and tyres clear | sled fits step 10c, pilots 18 apart | shell with four breakaway print posts: 0 islands; items 1 to 3 right |
+| Hand-over leans on supports for the island | no | n/a | no |
+| FROZEN input left as it was | yes (new v7.1, v7.2) | yes (new v16.1) | yes (four new versions) |
+| CadQuery processes run with no memory cap | 0 (4 through the runner) | 0 (3) | 0 (11) |
+| Renders made and opened | 4 / 4 | 2 / 3 | 7 / 7 |
+| Tokens / cost at API list prices / wall | 1.25 M / $3.65 / 9.0 min | 0.70 M / $2.40 / 4.2 min | 2.49 M / $6.89 / 19.5 min |
+
+10. **Shell slot.** The run built the slot as v7.1, then ran the island check and found the two
+    HIGH islands: the wall "stands on the bed on a foot only 36.56 mm wide, and the slot is 40 mm
+    wide, so it takes the whole foot". It did not clear v7.1 to print. It built v7.2, which cuts
+    the hanging wall away up to the arch crowns (no islands, the tray and tyres still clear), and
+    put three choices to the user: v7.2 (its recommendation), v7.1 on supports "accepting that it
+    may break off mid-print", or a narrower tray.
+11. **Plate chain.** The run built v16.1 with the pilots, found that `rover_refs.py` still loads
+    step 8c while the plate on the robot is 10c, and checked and built v16.1 against 10c: it fits.
+    It left `rover_refs.py` alone because the FROZEN bumper imports it, and said it still needs
+    fixing. The bare model caught this one too, so the skill made no difference to the outcome here.
+12. **Punch list.** All four items were done in new versions and measure right. On the shell the
+    run measured the islands first, found that no permanent foot fits between the tyre and the dock
+    bar, and added four 4 x 2 mm print posts where the old pillars stood: the shell prints as v3
+    did, and the posts are cut off along the arch line before fitting (they sit in the tyres'
+    space; a render shows them). It named the alternatives in `QUESTIONS.md`, slicer supports
+    among them. It also caught the 4 mm dock and bumper-height effects of the bigger wheels.
+
+`grade.py` reads eval 12's delivered shell as not clearing 60 mm tyres (closest shell point
+26.25 mm from the axle): those are the print posts, which are cut off. Its "latest shell" is a
+trimmed probe STEP the run wrote after the delivered file; the delivered `scout_shell_v3_1` has no
+islands.
+
+#### What the two arms show together
+
+On the two island evals the same model, with and without the skill, saw the same hanging wall.
+Without the skill it shipped the wall on supports both times. With the skill it measured the
+island, refused to call it a support setting, and delivered a part with no islands, once by
+cutting the wall away (and asking) and once with breakaway posts. That is the failure the skill
+was written after, buried the way it happened, and the difference this batch was built to find.
+It cost about 2.8 times the tokens and 2.1 times the money: 4.44 M tokens and $12.93 for the three
+skill runs against 1.59 M and $6.02 without. On the drift both arms were right.
+
+One run per eval and arm: each cell is one sample, not a rate.
 
 ## Grading notes
 
@@ -303,6 +348,12 @@ One run per eval: each cell is one sample, not a rate.
   says about supports (`supports_said`).
 - Batch 3's skill copy was put in the run folder only after the no-skill runs finished (the
   grader needs it for the island check), so those runs could not have found it.
+- The skill arm's runs then showed two more counter gaps, both fixed and checked by hand: a
+  PowerShell `foreach` that starts the runner once per listed script counted once, and a Bash loop
+  that only compared files (`cmp ... $f`) counted as four uncapped runs. A loop now counts only when
+  it starts Python or a variable the command points at a Python. Batches 1 and 2 keep every count;
+  some runner scripts that showed as "?" now show their names. `run_batch.ps1` takes `-BudgetUsd`
+  (batch 3's skill arm ran at $15 a run).
 
 ## Isolation
 

@@ -2,7 +2,8 @@
 #   pwsh -File run_batch.ps1 -Jobs fable52-high:baseline:1,fable52-high:baseline:2 -Parallel 3
 param(
     [Parameter(Mandatory = $true)][string[]]$Jobs,
-    [int]$Parallel = 3
+    [int]$Parallel = 3,
+    [double]$BudgetUsd = 10     # per run, passed to run_eval.ps1
 )
 $pwsh = (Get-Process -Id $PID).Path
 $runner = Join-Path $PSScriptRoot 'run_eval.ps1'
@@ -17,7 +18,7 @@ while ($queue.Count -or $running.Count) {
         $j = $queue.Dequeue()
         $c, $a, $e = $j -split ':'
         $out = Join-Path $logDir "$c.$a.eval-$e.harness.txt"
-        $p = Start-Process -FilePath $pwsh -ArgumentList @('-NoProfile', '-File', $runner, '-Config', $c, '-Arm', $a, '-EvalId', $e) `
+        $p = Start-Process -FilePath $pwsh -ArgumentList @('-NoProfile', '-File', $runner, '-Config', $c, '-Arm', $a, '-EvalId', $e, '-BudgetUsd', "$BudgetUsd") `
             -RedirectStandardOutput $out -RedirectStandardError "$out.err" -WindowStyle Hidden -PassThru
         if (-not $p) {   # a failed launch must not sit in $running forever
             Write-Host ("{0:HH:mm:ss} FAILED to start {1}" -f (Get-Date), $j)

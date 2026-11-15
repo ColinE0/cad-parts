@@ -510,6 +510,9 @@ def runner_calls(cmd, shell):
 
 # A Bash loop that runs a script per item: for f in a.py b.py; do "$PY" dir/$f; done
 LOOP = re.compile(r"\bfor\s+(\w+)\s+in\s+([^;\n]+?)\s*;\s*do\b(.*?)\bdone\b", re.S)
+# PowerShell: $name = "value" assignments, and foreach ($s in "a","b") loops (variable, item list)
+PS_ASSIGN = re.compile(r"""\$(\w+)\s*=\s*["']([^"']+)["']""")
+PS_FOREACH = re.compile(r"""\bforeach\s*\(\s*\$(\w+)\s+in\s+([^)]+)\)""", re.I)
 # The folder a command starts by moving into: cd "x" && ..., Set-Location x; ...
 LEAD_CD = re.compile(r"""^\s*(?:cd|Set-Location|sl|pushd)\s+(?:-Path\s+)?(?:"([^"]+)"|'([^']+)'|([^\s;&|]+))""", re.I)
 # A heredoc that writes a file: its target and its body (cat > x.py <<'EOF' ... EOF)
@@ -561,7 +564,19 @@ def python_runs(cmd, run, shell, base, written):
     the folder the command runs in; written maps paths the run wrote to their last text."""
     calls = runner_calls(cmd, shell)
     if calls:
-        return [None if a.startswith("$") else as_path(a, base) for a in calls], []
+        # PowerShell: $b = "..."; foreach ($s in "a.py","b.py") { & $r -Script "$b\$s" } starts one per item
+        assigned = dict(PS_ASSIGN.findall(cmd))
+        loops = {v: re.findall(r"""["']([^"']+)["']""", items) for v, items in PS_FOREACH.findall(cmd)}
+        out = []
+        for a in calls:
+            todo = [a]
+            for v, items in loops.items():
+                if re.search(r"\$%s\b" % v, a) and items:
+                    todo = [re.sub(r"\$%s\b" % v, i.replace("\\", "\\\\"), t) for t in todo for i in items]
+            for t in todo:
+                t = re.sub(r"\$(\w+)", lambda m: assigned.get(m.group(1), m.group(0)), t)
+                out.append(None if "$" in t else as_path(t, base))
+        return out, []
     body = FILE_HEREDOC.sub(r"\1", cmd) if shell == "Bash" else cmd
     hits = [m.group(2) or "" for m in PY_INV.finditer(body)]
     if "python.exe" in cmd.lower():
@@ -574,8 +589,11 @@ def python_runs(cmd, run, shell, base, written):
         else:
             p = None if s.strip("\"'").startswith("$") else as_path(s, base)
             found.append(("script", p, script_text(p, run, written)))
+    # shell variables the command points at a Python (PY="...python.exe"): only those start one
+    pyvars = "|".join(re.escape(v) for v, val in re.findall(r"""\b(\w+)=["']?([^\s"';&]+)""", body)
+                      if "python" in val.lower()) or "(?!)"
     for var, items, loop in LOOP.findall(body):
-        arg = re.compile(r"""(?:python(?:\.exe)?["']?|\$\{?\w+\}?"?)\s+(?:-[A-Za-z]+\s+)*["']?"""
+        arg = re.compile(r"""(?:python(?:\.exe)?["']?|"?\$\{?(?:%s)\}?"?)\s+(?:-[A-Za-z]+\s+)*["']?""" % pyvars +
                          r"""([^\s"';|&]*\$\{?%s\}?[^\s"';|&]*)""" % var)
         for m in arg.finditer(loop):
             for item in items.split():
