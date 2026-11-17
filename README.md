@@ -169,7 +169,7 @@ started on 2026-07-15: 79 printed revisions of parts made with it, 53 of them wi
 | Failed: cause not established | 2 |
 
 There were also 12 deliberate fit-tuning series (bore and spacing ladders, at least 20 prints) and
-14 printed parts with no recorded outcome. The tally comes from the parts' `STATUS:` lines, the
+14 printed parts with no recorded outcome (just simply forgot to record the outcome, but I'd chalk them up to more than likely successful considering that they weren't). The tally comes from the parts' `STATUS:` lines, the
 part-folder notes and the session history. Most verdicts are a fit by hand, not a measurement.
 
 **What it says about the checks.** Only 2 of the 18 geometry failures would be caught by a gate
